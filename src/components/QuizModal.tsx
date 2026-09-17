@@ -1244,13 +1244,14 @@ export const QuizModal: React.FC = () => {
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '8px' }}>
                 {t.quiz.step5Title}
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '20px' }}>
                 <button
                   type="button"
-                  className="btn"
                   style={{
+                    display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
+                    justifyContent: 'center',
                     border: '1.5px solid',
                     borderColor: format === 'trial' ? '#84CC16' : '#E2E8F0',
                     background: format === 'trial' ? '#FAFEF5' : '#FFFFFF',
@@ -1259,21 +1260,25 @@ export const QuizModal: React.FC = () => {
                     fontWeight: 700,
                     padding: '12px 6px',
                     borderRadius: '12px',
+                    cursor: 'pointer',
+                    gap: '4px',
+                    transition: 'all 0.2s ease',
                   }}
                   onClick={() => setFormat('trial')}
                 >
-                  <span>{locale === 'ru' ? '2 дня (тест)' : locale === 'ka' ? '2 დღე (ტესტი)' : '2 Days (Trial)'}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 800, marginTop: '2px', color: '#0F172A' }}>
+                  <span style={{ fontSize: '11.5px' }}>{locale === 'ru' ? '2 дня (тест)' : locale === 'ka' ? '2 დღე (ტესტი)' : '2 Days (Trial)'}</span>
+                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
                     {results.matchedProgram.prices.trialTwoDays} GEL
                   </span>
                 </button>
 
                 <button
                   type="button"
-                  className="btn"
                   style={{
+                    display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
+                    justifyContent: 'center',
                     border: '1.5px solid',
                     borderColor: format === 'standard' ? '#84CC16' : '#E2E8F0',
                     background: format === 'standard' ? '#FAFEF5' : '#FFFFFF',
@@ -1282,21 +1287,25 @@ export const QuizModal: React.FC = () => {
                     fontWeight: 700,
                     padding: '12px 6px',
                     borderRadius: '12px',
+                    cursor: 'pointer',
+                    gap: '4px',
+                    transition: 'all 0.2s ease',
                   }}
                   onClick={() => setFormat('standard')}
                 >
-                  <span>{locale === 'ru' ? '12 дней (-10%)' : locale === 'ka' ? '12 დღე (-10%)' : '12 Days (-10%)'}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 800, marginTop: '2px', color: '#0F172A' }}>
+                  <span style={{ fontSize: '11.5px' }}>{locale === 'ru' ? '12 дней (-10%)' : locale === 'ka' ? '12 დღე (-10%)' : '12 Days (-10%)'}</span>
+                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
                     {results.matchedProgram.prices.twelveDays} GEL
                   </span>
                 </button>
 
                 <button
                   type="button"
-                  className="btn"
                   style={{
+                    display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
+                    justifyContent: 'center',
                     border: '1.5px solid',
                     borderColor: format === 'month' ? '#84CC16' : '#E2E8F0',
                     background: format === 'month' ? '#FAFEF5' : '#FFFFFF',
@@ -1305,11 +1314,14 @@ export const QuizModal: React.FC = () => {
                     fontWeight: 700,
                     padding: '12px 6px',
                     borderRadius: '12px',
+                    cursor: 'pointer',
+                    gap: '4px',
+                    transition: 'all 0.2s ease',
                   }}
                   onClick={() => setFormat('month')}
                 >
-                  <span>{locale === 'ru' ? '30 дней (-20%)' : locale === 'ka' ? '30 დღე (-20%)' : '30 Days (-20%)'}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 800, marginTop: '2px', color: '#0F172A' }}>
+                  <span style={{ fontSize: '11.5px' }}>{locale === 'ru' ? '30 дней (-20%)' : locale === 'ka' ? '30 დღე (-20%)' : '30 Days (-20%)'}</span>
+                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
                     {results.matchedProgram.prices.thirtyDays} GEL
                   </span>
                 </button>

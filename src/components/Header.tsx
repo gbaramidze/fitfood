@@ -191,8 +191,8 @@ export const Header: React.FC = () => {
             <div className="header-container">
               {/* Logo */}
               <Link href="/" className="header-logo">
-                <span className="header-logo-badge">FIT</span>
-                <span>FOOD</span>
+                <span className="header-logo-badge">Academy</span>
+                <span>Fitness Food</span>
               </Link>
 
               {/* Clean Navigation Links */}
