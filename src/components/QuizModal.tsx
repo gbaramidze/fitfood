@@ -276,168 +276,170 @@ export const QuizModal: React.FC = () => {
   return (
     <div className="modal-overlay" onClick={() => setIsQuizOpen(false)}>
       <div
-        className="modal-content-card"
+        className="modal-content-card quiz-modal-window"
         style={{
           maxWidth: '680px',
           width: '100%',
-          maxHeight: '92vh',
-          overflowY: 'auto',
-          padding: '28px 24px',
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Top Close Button */}
-        <button
-          type="button"
-          className="modal-close-btn"
-          onClick={() => setIsQuizOpen(false)}
-          aria-label="Close"
-        >
-          <IconClose size={20} />
-        </button>
+        {/* Top Header */}
+        <div className="quiz-modal-header">
+          {/* Top Close Button */}
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={() => setIsQuizOpen(false)}
+            aria-label="Close"
+          >
+            <IconClose size={20} />
+          </button>
 
-        {/* Progress Bar & Header */}
-        <div style={{ marginBottom: '22px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--accent-green)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {t.quiz.step} {step} {t.quiz.of} 5
-            </span>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)' }}>
-              {Math.round((step / 5) * 100)}%
-            </span>
-          </div>
-          <div style={{ height: '6px', background: '#E2E8F0', borderRadius: '999px', overflow: 'hidden' }}>
-            <div
-              style={{
-                height: '100%',
-                width: `${(step / 5) * 100}%`,
-                background: 'linear-gradient(90deg, #84CC16 0%, #10B981 100%)',
-                borderRadius: '999px',
-                transition: 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            />
+          {/* Progress Bar & Header */}
+          <div style={{ paddingRight: '42px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--accent-green)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {t.quiz.step} {step} {t.quiz.of} 5
+              </span>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)' }}>
+                {Math.round((step / 5) * 100)}%
+              </span>
+            </div>
+            <div style={{ height: '6px', background: '#E2E8F0', borderRadius: '999px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  height: '100%',
+                  width: `${(step / 5) * 100}%`,
+                  background: 'linear-gradient(90deg, #84CC16 0%, #10B981 100%)',
+                  borderRadius: '999px',
+                  transition: 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+              />
+            </div>
           </div>
         </div>
 
-        {/* ========================================================
-            STEP 1: GOAL SELECTION
-            ======================================================== */}
-        {step === 1 && (
-          <div>
-            <h3 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-heading)', marginBottom: '8px' }}>
-              {t.quiz.step1Title}
-            </h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '22px' }}>
-              {t.quiz.subtitle}
-            </p>
+        {/* Scrollable Body */}
+        <div className="quiz-modal-body">
+          {/* ========================================================
+              STEP 1: GOAL SELECTION
+              ======================================================== */}
+          {step === 1 && (
+            <div>
+              <h3 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-heading)', marginBottom: '6px' }}>
+                {t.quiz.step1Title}
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.4 }}>
+                {t.quiz.subtitle}
+              </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '28px' }}>
-              {/* Weight loss */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px',
-                  padding: '16px',
-                  borderRadius: '16px',
-                  border: goal === 'weight_loss' ? '2px solid #84CC16' : '1.5px solid #E2E8F0',
-                  background: goal === 'weight_loss' ? '#FAFEF5' : '#FFFFFF',
-                  cursor: 'pointer',
-                  boxShadow: goal === 'weight_loss' ? '0 4px 16px rgba(132, 204, 22, 0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
-                  transition: 'all 0.2s ease',
-                }}
-                onClick={() => setGoal('weight_loss')}
-              >
-                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626' }}>
-                  <IconFire size={22} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* Weight loss */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 14px',
+                    borderRadius: '14px',
+                    border: goal === 'weight_loss' ? '2px solid #84CC16' : '1.5px solid #E2E8F0',
+                    background: goal === 'weight_loss' ? '#FAFEF5' : '#FFFFFF',
+                    cursor: 'pointer',
+                    boxShadow: goal === 'weight_loss' ? '0 4px 14px rgba(132, 204, 22, 0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onClick={() => setGoal('weight_loss')}
+                >
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626', flexShrink: 0 }}>
+                    <IconFire size={20} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-heading)' }}>{t.quiz.goalOptions.lossTitle}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{t.quiz.goalOptions.lossDesc}</div>
+                  </div>
+                  <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: goal === 'weight_loss' ? '5px solid #84CC16' : '2px solid #CBD5E1', flexShrink: 0 }} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-heading)' }}>{t.quiz.goalOptions.lossTitle}</div>
-                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>{t.quiz.goalOptions.lossDesc}</div>
-                </div>
-                <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: goal === 'weight_loss' ? '6px solid #84CC16' : '2px solid #CBD5E1' }} />
-              </div>
 
-              {/* Balance */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px',
-                  padding: '16px',
-                  borderRadius: '16px',
-                  border: goal === 'balance' ? '2px solid #84CC16' : '1.5px solid #E2E8F0',
-                  background: goal === 'balance' ? '#FAFEF5' : '#FFFFFF',
-                  cursor: 'pointer',
-                  boxShadow: goal === 'balance' ? '0 4px 16px rgba(132, 204, 22, 0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
-                  transition: 'all 0.2s ease',
-                }}
-                onClick={() => setGoal('balance')}
-              >
-                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
-                  <IconZap size={22} />
+                {/* Balance */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 14px',
+                    borderRadius: '14px',
+                    border: goal === 'balance' ? '2px solid #84CC16' : '1.5px solid #E2E8F0',
+                    background: goal === 'balance' ? '#FAFEF5' : '#FFFFFF',
+                    cursor: 'pointer',
+                    boxShadow: goal === 'balance' ? '0 4px 14px rgba(132, 204, 22, 0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onClick={() => setGoal('balance')}
+                >
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706', flexShrink: 0 }}>
+                    <IconZap size={20} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-heading)' }}>{t.quiz.goalOptions.balanceTitle}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{t.quiz.goalOptions.balanceDesc}</div>
+                  </div>
+                  <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: goal === 'balance' ? '5px solid #84CC16' : '2px solid #CBD5E1', flexShrink: 0 }} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-heading)' }}>{t.quiz.goalOptions.balanceTitle}</div>
-                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>{t.quiz.goalOptions.balanceDesc}</div>
-                </div>
-                <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: goal === 'balance' ? '6px solid #84CC16' : '2px solid #CBD5E1' }} />
-              </div>
 
-              {/* Muscle Gain */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px',
-                  padding: '16px',
-                  borderRadius: '16px',
-                  border: goal === 'muscle_gain' ? '2px solid #84CC16' : '1.5px solid #E2E8F0',
-                  background: goal === 'muscle_gain' ? '#FAFEF5' : '#FFFFFF',
-                  cursor: 'pointer',
-                  boxShadow: goal === 'muscle_gain' ? '0 4px 16px rgba(132, 204, 22, 0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
-                  transition: 'all 0.2s ease',
-                }}
-                onClick={() => setGoal('muscle_gain')}
-              >
-                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284C7' }}>
-                  <IconDumbbell size={22} />
+                {/* Muscle Gain */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 14px',
+                    borderRadius: '14px',
+                    border: goal === 'muscle_gain' ? '2px solid #84CC16' : '1.5px solid #E2E8F0',
+                    background: goal === 'muscle_gain' ? '#FAFEF5' : '#FFFFFF',
+                    cursor: 'pointer',
+                    boxShadow: goal === 'muscle_gain' ? '0 4px 14px rgba(132, 204, 22, 0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onClick={() => setGoal('muscle_gain')}
+                >
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284C7', flexShrink: 0 }}>
+                    <IconDumbbell size={20} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-heading)' }}>{t.quiz.goalOptions.muscleTitle}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{t.quiz.goalOptions.muscleDesc}</div>
+                  </div>
+                  <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: goal === 'muscle_gain' ? '5px solid #84CC16' : '2px solid #CBD5E1', flexShrink: 0 }} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-heading)' }}>{t.quiz.goalOptions.muscleTitle}</div>
-                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>{t.quiz.goalOptions.muscleDesc}</div>
-                </div>
-                <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: goal === 'muscle_gain' ? '6px solid #84CC16' : '2px solid #CBD5E1' }} />
-              </div>
 
-              {/* Detox */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px',
-                  padding: '16px',
-                  borderRadius: '16px',
-                  border: goal === 'tourist_detox' ? '2px solid #84CC16' : '1.5px solid #E2E8F0',
-                  background: goal === 'tourist_detox' ? '#FAFEF5' : '#FFFFFF',
-                  cursor: 'pointer',
-                  boxShadow: goal === 'tourist_detox' ? '0 4px 16px rgba(132, 204, 22, 0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
-                  transition: 'all 0.2s ease',
-                }}
-                onClick={() => setGoal('tourist_detox')}
-              >
-                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
-                  <IconLeaf size={22} />
+                {/* Detox */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 14px',
+                    borderRadius: '14px',
+                    border: goal === 'tourist_detox' ? '2px solid #84CC16' : '1.5px solid #E2E8F0',
+                    background: goal === 'tourist_detox' ? '#FAFEF5' : '#FFFFFF',
+                    cursor: 'pointer',
+                    boxShadow: goal === 'tourist_detox' ? '0 4px 14px rgba(132, 204, 22, 0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onClick={() => setGoal('tourist_detox')}
+                >
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', flexShrink: 0 }}>
+                    <IconLeaf size={20} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-heading)' }}>{t.quiz.goalOptions.touristTitle}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{t.quiz.goalOptions.touristDesc}</div>
+                  </div>
+                  <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: goal === 'tourist_detox' ? '5px solid #84CC16' : '2px solid #CBD5E1', flexShrink: 0 }} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-heading)' }}>{t.quiz.goalOptions.touristTitle}</div>
-                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>{t.quiz.goalOptions.touristDesc}</div>
-                </div>
-                <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: goal === 'tourist_detox' ? '6px solid #84CC16' : '2px solid #CBD5E1' }} />
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* ========================================================
             STEP 2: BODY METRICS WITH INTERACTIVE SLIDERS / STEPPERS
@@ -1357,39 +1359,37 @@ export const QuizModal: React.FC = () => {
           </div>
         )}
 
+        </div>
+
         {/* ========================================================
-            MODAL FOOTER NAVIGATION (PREV / NEXT)
+            STICKY MODAL FOOTER NAVIGATION (PREV / NEXT)
             ======================================================== */}
         {step < 5 && (
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderTop: '1px solid #E2E8F0',
-              paddingTop: '18px',
-              marginTop: '10px',
-            }}
-          >
+          <div className="quiz-modal-footer">
             {step > 1 ? (
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => setStep(step - 1)}
-                style={{ borderRadius: '12px', padding: '10px 18px', fontWeight: 700 }}
+                style={{ borderRadius: '12px', padding: '12px 18px', fontWeight: 700, flexShrink: 0 }}
               >
                 <IconArrowLeft size={16} />
                 <span>{t.quiz.back}</span>
               </button>
-            ) : (
-              <div />
-            )}
+            ) : null}
 
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => setStep(step + 1)}
-              style={{ borderRadius: '12px', padding: '10px 22px', fontWeight: 800 }}
+              style={{
+                borderRadius: '12px',
+                padding: '12px 24px',
+                fontWeight: 800,
+                flex: 1,
+                justifyContent: 'center',
+                boxShadow: '0 4px 14px rgba(132, 204, 22, 0.35)'
+              }}
             >
               <span>{step === 4 ? t.quiz.seeResult : t.quiz.next}</span>
               <IconArrowRight size={16} />
