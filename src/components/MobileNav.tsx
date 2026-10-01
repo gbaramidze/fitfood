@@ -10,6 +10,10 @@ export const MobileNav: React.FC = () => {
   const pathname = usePathname();
   const { locale } = useLanguage();
 
+  if (pathname?.startsWith('/partner') || pathname?.startsWith('/admin')) {
+    return null;
+  }
+
   return (
     <nav className="mobile-nav-bar">
       <div className="mobile-nav-grid">

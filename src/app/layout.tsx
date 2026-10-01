@@ -21,23 +21,21 @@ export const metadata: Metadata = {
   },
 };
 
+import { SiteNavigationWrapper } from '@/components/SiteNavigationWrapper';
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru">
+    <html lang="ka">
       <body>
         <LanguageProvider>
           <StoreProvider>
-            <Header />
-            {children}
-            <Footer />
-            <MobileNav />
-            <CartDrawer />
-            <DishModal />
-            <QuizModal />
+            <SiteNavigationWrapper>
+              {children}
+            </SiteNavigationWrapper>
           </StoreProvider>
         </LanguageProvider>
       </body>

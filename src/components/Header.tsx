@@ -15,12 +15,20 @@ import {
   IconChevronDown, 
   IconCheck 
 } from '@/components/Icons';
+import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import { LanguageDropdown } from '@/components/LanguageDropdown';
 import { CallbackModal } from '@/components/CallbackModal';
 
 export const Header: React.FC = () => {
+  const pathname = usePathname();
   const { locale, t } = useLanguage();
   const { cart, setIsCartOpen } = useStore();
+
+  // Hide header on partner portal and admin dashboard
+  if (pathname?.startsWith('/partner') || pathname?.startsWith('/admin')) {
+    return null;
+  }
   const [isCallbackOpen, setIsCallbackOpen] = useState(false);
   const [selectedCity, setSelectedCity] = useState<'Batumi' | 'Tbilisi'>('Batumi');
   const [showCityDropdown, setShowCityDropdown] = useState(false);
@@ -190,9 +198,24 @@ export const Header: React.FC = () => {
           <div className="container">
             <div className="header-container">
               {/* Logo */}
-              <Link href="/" className="header-logo">
-                <span className="header-logo-badge">Academy</span>
-                <span>Fitness Food</span>
+              <Link href="/" className="header-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ position: 'relative', width: '38px', height: '38px', flexShrink: 0 }}>
+                  <Image
+                    src="/images/logo-transparent.png"
+                    alt="Academy Fitness Food"
+                    fill
+                    style={{ objectFit: 'contain' }}
+                    priority
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em', color: '#64748B', textTransform: 'uppercase' }}>
+                    ACADEMY
+                  </span>
+                  <span style={{ fontSize: '15.5px', fontWeight: 900, letterSpacing: '-0.02em', color: '#0F172A', fontFamily: 'var(--font-heading)' }}>
+                    FITNESS <span style={{ color: '#16A34A' }}>FOOD</span>
+                  </span>
+                </div>
               </Link>
 
               {/* Clean Navigation Links */}

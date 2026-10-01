@@ -2,11 +2,18 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import { useLanguage } from '@/context/LanguageContext';
 import { IconTelegram, IconWhatsApp, IconPhone, IconShield } from '@/components/Icons';
 
 export const Footer: React.FC = () => {
+  const pathname = usePathname();
   const { locale } = useLanguage();
+
+  if (pathname?.startsWith('/partner') || pathname?.startsWith('/admin')) {
+    return null;
+  }
 
   return (
     <footer className="site-footer">
@@ -14,9 +21,23 @@ export const Footer: React.FC = () => {
         <div className="footer-grid-3col">
           {/* Col 1: Brand & Values */}
           <div>
-            <Link href="/" className="header-logo" style={{ color: '#FFFFFF', marginBottom: '16px', display: 'inline-flex' }}>
-              <span className="header-logo-badge">FIT</span>
-              <span>FOOD</span>
+            <Link href="/" className="header-logo" style={{ color: '#FFFFFF', marginBottom: '16px', display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ position: 'relative', width: '42px', height: '42px', flexShrink: 0 }}>
+                <Image
+                  src="/images/logo-white.png"
+                  alt="Academy Fitness Food"
+                  fill
+                  style={{ objectFit: 'contain' }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em', color: '#94A3B8', textTransform: 'uppercase' }}>
+                  ACADEMY
+                </span>
+                <span style={{ fontSize: '16px', fontWeight: 900, letterSpacing: '-0.02em', color: '#FFFFFF', fontFamily: 'var(--font-heading)' }}>
+                  FITNESS <span style={{ color: '#CCFF00' }}>FOOD</span>
+                </span>
+              </div>
             </Link>
             <p style={{ fontSize: '13.5px', lineHeight: 1.6, marginBottom: '20px', color: '#94A3B8', maxWidth: '360px' }}>
               {locale === 'ru'

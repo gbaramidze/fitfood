@@ -56,32 +56,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     bonusPointsGEL: 40,
   });
 
-  // Load from local storage
-  useEffect(() => {
-    try {
-      const savedCart = localStorage.getItem('fitfood_cart');
-      if (savedCart) setCart(JSON.parse(savedCart));
-
-      const savedOrders = localStorage.getItem('fitfood_orders');
-      if (savedOrders) setOrders(JSON.parse(savedOrders));
-
-      const savedSub = localStorage.getItem('fitfood_sub');
-      if (savedSub) setUserSubscription(JSON.parse(savedSub));
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
   const addToCart = (item: CartItem) => {
     setCart(item);
-    localStorage.setItem('fitfood_cart', JSON.stringify(item));
     setIsCartOpen(true);
     showToast('Рацион добавлен в корзину');
   };
 
   const clearCart = () => {
     setCart(null);
-    localStorage.removeItem('fitfood_cart');
   };
 
   const swapDish = (originalId: string, replacementId: string) => {
@@ -102,7 +84,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ...prev,
         frozenDates: [...prev.frozenDates, dateStr],
       };
-      localStorage.setItem('fitfood_sub', JSON.stringify(updated));
       return updated;
     });
     showToast('Завтрашний день успешно заморожен без потери дней!');
@@ -111,7 +92,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addOrder = (order: OrderConfirmation) => {
     const updated = [order, ...orders];
     setOrders(updated);
-    localStorage.setItem('fitfood_orders', JSON.stringify(updated));
     clearCart();
     const days = order.cartItem.daysDuration || 12;
     setUserSubscription({
