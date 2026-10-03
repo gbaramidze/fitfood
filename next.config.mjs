@@ -10,6 +10,21 @@ const nextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: '/patrner',
+        destination: '/partner',
+        permanent: true,
+      },
+      {
+        source: '/partners',
+        destination: '/partner',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
+

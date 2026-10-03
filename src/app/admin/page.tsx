@@ -18,10 +18,10 @@ export default async function AdminPage() {
 
   if (isSupabaseConfigured) {
     try {
-      // 1. SSR Fetch Dishes / Products
+      // 1. SSR Fetch Dishes / Products (Metadata only)
       const { data: dbProducts } = await supabase
         .from('partner_products')
-        .select('*');
+        .select('id, name, category, category_name, price, cost_price, calories, weight_grams, image, badge, created_at, slug, description, meal_type, day, protein, fat, carbs, ingredients, allergens, cooking_method, target_channels, updated_at');
 
       if (dbProducts && dbProducts.length > 0) {
         initialDishes = dbProducts.map(mapSupabaseProductToAdminDish);

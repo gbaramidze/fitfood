@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Image from 'next/image';
 import { useAdmin } from '@/context/AdminContext';
 import { AdminDish, DishCategory } from '@/types/admin';
 import { MealType, DayOfWeek } from '@/types';
+import { LazyProductImage } from '@/components/partner/LazyProductImage';
+import { productImageService } from '@/services/productImageService';
+import { supabaseStorageService, compressImageToBlob } from '@/services/supabaseStorageService';
 
 const PRESET_IMAGES = [
   { url: '/images/meals/syrniki-strawberry.webp', label: 'სირნიკები მარწყვით' },
@@ -38,9 +41,50 @@ const DAYS_MAP: { id: DayOfWeek; label: string }[] = [
   { id: 'sun', label: 'კვირა' },
 ];
 
+const CATEGORY_OPTIONS: { id: DishCategory; label: string; icon: string }[] = [
+  { id: 'poultry', label: 'ქათამი / ფრინველი', icon: '🍗' },
+  { id: 'meat', label: 'საქონლის ხორცი', icon: '🥩' },
+  { id: 'fish', label: 'თევზი & ზღვის პროდუქტები', icon: '🐟' },
+  { id: 'breakfast', label: 'საუზმე & ხაჭო', icon: '🥞' },
+  { id: 'salad', label: 'სალათი & ბოსტნეული', icon: '🥗' },
+  { id: 'soup', label: 'წვნიანი & სუპი', icon: '🍲' },
+  { id: 'dessert', label: 'ჯანსაღი დესერტი', icon: '🧁' },
+  { id: 'drinks', label: 'სასმელები & სმუზი', icon: '🥤' },
+];
+
 const ALLERGEN_OPTIONS = [
   'გლუტენი', 'ლაქტოზა', 'კვერცხი', 'თხილი/არაქისი', 'თევზი', 'ზღვის პროდუქტები', 'სოიო', 'სეზამი', 'შაქრის გარეშე'
 ];
+
+const STORAGE_SETUP_SQL = `-- 1. FitFood Product Images Bucket Setup
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'product-images',
+  'product-images',
+  true,
+  10485760,
+  ARRAY['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml']
+)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- 2. Drop existing policies to prevent conflicts
+DROP POLICY IF EXISTS "Public Read Product Images" ON storage.objects;
+DROP POLICY IF EXISTS "Public Upload Product Images" ON storage.objects;
+DROP POLICY IF EXISTS "Public Update Product Images" ON storage.objects;
+DROP POLICY IF EXISTS "Public Delete Product Images" ON storage.objects;
+
+-- 3. Enable public read and write policies
+CREATE POLICY "Public Read Product Images" ON storage.objects
+  FOR SELECT USING (bucket_id = 'product-images');
+
+CREATE POLICY "Public Upload Product Images" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'product-images');
+
+CREATE POLICY "Public Update Product Images" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'product-images');
+
+CREATE POLICY "Public Delete Product Images" ON storage.objects
+  FOR DELETE USING (bucket_id = 'product-images');`;
 
 export const AdminDishesManager: React.FC = () => {
   const { dishes, addDish, updateDish, deleteDish, searchQuery, refreshDishes, isLoadingDishes } = useAdmin();
@@ -49,17 +93,31 @@ export const AdminDishesManager: React.FC = () => {
   const [dayFilter, setDayFilter] = useState<string>('all');
   const [editingDish, setEditingDish] = useState<AdminDish | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Storage Modal & State
+  const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
+  const [storageStatus, setStorageStatus] = useState<{ exists: boolean; canUpload: boolean; checking: boolean; error?: string }>({
+    exists: false,
+    canUpload: false,
+    checking: false,
+  });
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationProgress, setMigrationProgress] = useState<{ current: number; total: number; dishName: string; status: string } | null>(null);
+  const [migrationResult, setMigrationResult] = useState<{ total: number; migrated: number; skipped: number; errors: string[] } | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // JSON Import Modal State
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
   const [jsonInputText, setJsonInputText] = useState('');
   const [jsonParseError, setJsonParseError] = useState('');
-  const [jsonSuccessMsg, setJsonSuccessMsg] = useState('');
 
   // Photo Mode State
   const [photoTab, setPhotoTab] = useState<'upload' | 'presets' | 'url'>('upload');
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadNotice, setImageUploadNotice] = useState<{ type: 'success' | 'warn' | 'error'; text: string } | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Language Tab State for Modal
@@ -94,20 +152,120 @@ export const AdminDishesManager: React.FC = () => {
   const [formAllergens, setFormAllergens] = useState<string[]>([]);
   const [formCookingMethod, setFormCookingMethod] = useState<'sous_vide' | 'baked' | 'steamed' | 'grilled' | 'raw'>('sous_vide');
 
-  const handleFileUpload = (file: File) => {
+  const [lastAddedDishId, setLastAddedDishId] = useState<string | null>(null);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  // Check Storage Status on mount & when opening storage modal
+  const checkStorage = async () => {
+    setStorageStatus(prev => ({ ...prev, checking: true }));
+    const res = await supabaseStorageService.checkBucketStatus();
+    setStorageStatus({
+      exists: res.exists,
+      canUpload: res.canUpload,
+      checking: false,
+      error: res.error,
+    });
+  };
+
+  useEffect(() => {
+    checkStorage();
+  }, []);
+
+  // Compute image storage statistics
+  const imageStats = useMemo(() => {
+    let storageUrls = 0;
+    let base64Blobs = 0;
+    let presets = 0;
+    let externalUrls = 0;
+
+    dishes.forEach(d => {
+      const img = d.image || '';
+      if (img.includes('supabase.co/storage')) {
+        storageUrls++;
+      } else if (img.startsWith('data:image/')) {
+        base64Blobs++;
+      } else if (img.startsWith('/images/')) {
+        presets++;
+      } else if (img.startsWith('http')) {
+        externalUrls++;
+      }
+    });
+
+    return { storageUrls, base64Blobs, presets, externalUrls, total: dishes.length };
+  }, [dishes]);
+
+  // Handle Image File Upload directly to Supabase Storage
+  const handleFileUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('გთხოვთ აირჩიოთ სურათის ფაილი (JPG, PNG, WEBP)');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setFormImage(e.target.result as string);
+
+    setIsUploadingImage(true);
+    setImageUploadNotice(null);
+
+    try {
+      // 1. Compress image to high-efficiency WebP
+      const { blob } = await compressImageToBlob(file, 1200, 1200, 0.85);
+
+      // 2. Try upload to Supabase Storage
+      const uploadRes = await supabaseStorageService.uploadProductImage(blob, 'dish');
+
+      if (uploadRes && uploadRes.publicUrl) {
+        setFormImage(uploadRes.publicUrl);
         setFormCustomUrl('');
         setUploadedFileName(file.name);
+        setImageUploadNotice({
+          type: 'success',
+          text: `✓ სურათი წარმატებით აიტვირთა Supabase Storage-ში (${(blob.size / 1024).toFixed(0)} KB WebP)`
+        });
+      } else {
+        // Fallback: Read as base64 data url if bucket is not yet active
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            const dataUrl = e.target.result as string;
+            setFormImage(dataUrl);
+            setFormCustomUrl('');
+            setUploadedFileName(file.name);
+            setImageUploadNotice({
+              type: 'warn',
+              text: '⚠️ შენახულია დროებით. სრული Storage-სთვის შექმენით "product-images" bucket Supabase-ში.'
+            });
+          }
+        };
+        reader.readAsDataURL(blob);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('File upload error:', err);
+      setImageUploadNotice({
+        type: 'error',
+        text: `ატვირთვის შეცდომა: ${err.message || 'ვერ მოხერხდა'}`
+      });
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  // Run Base64 to Storage migration
+  const handleRunMigration = async () => {
+    setIsMigrating(true);
+    setMigrationResult(null);
+    setMigrationProgress({ current: 0, total: imageStats.base64Blobs, dishName: 'დაწყება...', status: 'starting' });
+
+    try {
+      const result = await supabaseStorageService.migrateAllBase64ImagesToStorage((p) => {
+        setMigrationProgress(p);
+      });
+
+      setMigrationResult(result);
+      await refreshDishes();
+      await checkStorage();
+    } catch (e: any) {
+      setMigrationResult({ total: 0, migrated: 0, skipped: 0, errors: [e.message] });
+    } finally {
+      setIsMigrating(false);
+    }
   };
 
   const parseIngredientsText = (text: string): string[] => {
@@ -124,7 +282,7 @@ export const AdminDishesManager: React.FC = () => {
       en: "Mexican Style Chicken Breast"
     },
     description: {
-      ru: "Сочное филе су-ვიდ с кукурузой и сладким перцем",
+      ru: "Сочное филе су-вид с кукурузой и сладким перцем",
       ka: "წვნიანი ფილე ბოსტნეულით და სუ-ვიდ ტექნოლოგიით",
       en: "Tender sous-vide chicken with peppers and herbs"
     },
@@ -182,7 +340,6 @@ export const AdminDishesManager: React.FC = () => {
   const applyJsonToForm = (jsonString: string) => {
     try {
       setJsonParseError('');
-      setJsonSuccessMsg('');
 
       const cleanJson = jsonString
         .replace(/^```json\s*/i, '')
@@ -329,6 +486,7 @@ export const AdminDishesManager: React.FC = () => {
     setLangTab('ka');
     setPhotoTab('upload');
     setUploadedFileName('');
+    setImageUploadNotice(null);
     setFormNameKa('');
     setFormNameRu('');
     setFormNameEn('');
@@ -360,6 +518,7 @@ export const AdminDishesManager: React.FC = () => {
     setEditingDish(dish);
     setLangTab('ka');
     setUploadedFileName('');
+    setImageUploadNotice(null);
     setFormNameKa(dish.name.ka || '');
     setFormNameRu(dish.name.ru || dish.name.ka || '');
     setFormNameEn(dish.name.en || dish.name.ka || '');
@@ -372,99 +531,118 @@ export const AdminDishesManager: React.FC = () => {
     setFormIngredientsRu(Array.isArray(dish.ingredients?.ru) ? dish.ingredients.ru.join('\n') : '');
     setFormIngredientsEn(Array.isArray(dish.ingredients?.en) ? dish.ingredients.en.join('\n') : '');
 
-    setFormCategory(dish.category);
-    setFormMealType(dish.mealType);
+    setFormCategory(dish.category || 'poultry');
+    setFormMealType(dish.mealType || 'lunch');
     setFormDay(dish.day || 'mon');
-    setFormCalories(dish.macros.calories);
-    setFormProtein(dish.macros.protein);
-    setFormFat(dish.macros.fat);
-    setFormCarbs(dish.macros.carbs);
-    setFormWeight(dish.macros.weightGrams);
-    setFormCostPrice(dish.costPrice);
-    setFormRetailPrice(dish.retailPrice);
-    setFormImage(dish.image);
-    setFormCustomUrl(dish.image.startsWith('http') ? dish.image : '');
-    setPhotoTab(dish.image.startsWith('data:') ? 'upload' : dish.image.startsWith('http') ? 'url' : 'presets');
-    setFormChannels(dish.targetChannels);
+    setFormCalories(dish.macros?.calories || 450);
+    setFormProtein(dish.macros?.protein || 35);
+    setFormFat(dish.macros?.fat || 12);
+    setFormCarbs(dish.macros?.carbs || 45);
+    setFormWeight(dish.macros?.weightGrams || 320);
+    setFormCostPrice(dish.costPrice || 6.5);
+    setFormRetailPrice(dish.retailPrice || 15.0);
+    
+    const existingImg = dish.image || productImageService.getCachedImage(dish.id) || '/images/meals/chicken-ptitim.webp';
+    setFormImage(existingImg);
+    setFormCustomUrl(existingImg.startsWith('http') ? existingImg : '');
+    setPhotoTab(existingImg.startsWith('data:') ? 'upload' : existingImg.startsWith('http') ? 'url' : 'presets');
+    
+    if (!dish.image || !dish.image.startsWith('http')) {
+      productImageService.fetchProductImage(dish.id).then(img => {
+        if (img) {
+          setFormImage(img);
+          setFormCustomUrl(img.startsWith('http') ? img : '');
+          setPhotoTab(img.startsWith('data:') ? 'upload' : img.startsWith('http') ? 'url' : 'presets');
+        }
+      });
+    }
+
+    setFormChannels(Array.isArray(dish.targetChannels) ? dish.targetChannels : ['site', 'pos']);
     setFormAllergens(dish.allergens || []);
     setFormCookingMethod(dish.cookingMethod || 'sous_vide');
     setIsModalOpen(true);
   };
 
-  const [lastAddedDishId, setLastAddedDishId] = useState<string | null>(null);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
-
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formNameKa.trim() && !formNameRu.trim()) {
       alert('გთხოვთ მიუთითოთ კერძის სახელწოდება');
       return;
     }
 
-    const finalImage = formCustomUrl.trim() || formImage;
-    const nameKa = formNameKa.trim() || formNameRu.trim();
-    const nameRu = formNameRu.trim() || nameKa;
-    const nameEn = formNameEn.trim() || nameKa;
+    setIsSaving(true);
 
-    const descKa = formDescKa.trim() || 'საბალანსირებული ჯანსაღი კერძი.';
-    const descRu = formDescRu.trim() || descKa;
-    const descEn = formDescEn.trim() || descKa;
+    try {
+      const finalImage = formCustomUrl.trim() || formImage;
+      const nameKa = formNameKa.trim() || formNameRu.trim();
+      const nameRu = formNameRu.trim() || nameKa;
+      const nameEn = formNameEn.trim() || nameKa;
 
-    const ingKa = parseIngredientsText(formIngredientsKa);
-    const ingRu = parseIngredientsText(formIngredientsRu).length > 0 ? parseIngredientsText(formIngredientsRu) : ingKa;
-    const ingEn = parseIngredientsText(formIngredientsEn).length > 0 ? parseIngredientsText(formIngredientsEn) : ingKa;
+      const descKa = formDescKa.trim() || 'საბალანსირებული ჯანსაღი კერძი.';
+      const descRu = formDescRu.trim() || descKa;
+      const descEn = formDescEn.trim() || descKa;
 
-    const payload = {
-      slug: (formNameEn || formNameKa).toLowerCase().replace(/[^a-z0-9]/gi, '-').slice(0, 30) || 'dish',
-      name: { ka: nameKa, ru: nameRu, en: nameEn },
-      description: { ka: descKa, ru: descRu, en: descEn },
-      category: formCategory,
-      mealType: formMealType,
-      day: formDay,
-      macros: {
-        calories: Number(formCalories),
-        protein: Number(formProtein),
-        fat: Number(formFat),
-        carbs: Number(formCarbs),
-        weightGrams: Number(formWeight),
-      },
-      costPrice: Number(formCostPrice),
-      retailPrice: Number(formRetailPrice),
-      targetChannels: formChannels,
-      image: finalImage,
-      tags: ['#FitFood'],
-      allergens: formAllergens,
-      cookingMethod: formCookingMethod,
-      ingredients: {
-        ka: ingKa,
-        ru: ingRu,
-        en: ingEn,
-      },
-      isGeorgianFit: true,
-      inStockCount: editingDish ? editingDish.inStockCount : 0,
-    };
+      const ingKa = parseIngredientsText(formIngredientsKa);
+      const ingRu = parseIngredientsText(formIngredientsRu).length > 0 ? parseIngredientsText(formIngredientsRu) : ingKa;
+      const ingEn = parseIngredientsText(formIngredientsEn).length > 0 ? parseIngredientsText(formIngredientsEn) : ingKa;
 
-    let targetId = '';
-    if (editingDish) {
-      updateDish(editingDish.id, payload);
-      targetId = editingDish.id;
-      setSaveSuccessMsg(`✓ კერძი «${nameKa}» წარმატებით განახლდა!`);
-    } else {
-      const created = addDish(payload);
-      targetId = created.id;
-      setSaveSuccessMsg(`✓ ახალი კერძი «${nameKa}» წარმატებით დაემატა ბაზაში!`);
+      const payload = {
+        slug: (formNameEn || formNameKa).toLowerCase().replace(/[^a-z0-9]/gi, '-').slice(0, 30) || 'dish',
+        name: { ka: nameKa, ru: nameRu, en: nameEn },
+        description: { ka: descKa, ru: descRu, en: descEn },
+        category: formCategory,
+        mealType: formMealType,
+        day: formDay,
+        macros: {
+          calories: Number(formCalories),
+          protein: Number(formProtein),
+          fat: Number(formFat),
+          carbs: Number(formCarbs),
+          weightGrams: Number(formWeight),
+        },
+        costPrice: Number(formCostPrice),
+        retailPrice: Number(formRetailPrice),
+        targetChannels: formChannels,
+        image: finalImage,
+        tags: ['#FitFood'],
+        allergens: formAllergens,
+        cookingMethod: formCookingMethod,
+        ingredients: {
+          ka: ingKa,
+          ru: ingRu,
+          en: ingEn,
+        },
+        isGeorgianFit: true,
+        inStockCount: editingDish ? editingDish.inStockCount : 0,
+      };
+
+      let targetId = '';
+      if (editingDish) {
+        await updateDish(editingDish.id, payload);
+        targetId = editingDish.id;
+        productImageService.invalidateImage(editingDish.id);
+        setSaveSuccessMsg(`✓ კერძი «${nameKa}» წარმატებით განახლდა!`);
+      } else {
+        const created = await addDish(payload);
+        targetId = created.id;
+        setSaveSuccessMsg(`✓ ახალი კერძი «${nameKa}» წარმატებით დაემატა ბაზაში!`);
+      }
+
+      // Auto-adjust filters so the user ALWAYS sees their dish immediately
+      setChannelFilter('all');
+      setDayFilter('all');
+      setLastAddedDishId(targetId);
+      setIsModalOpen(false);
+
+      // Auto-dismiss success notification after 7s
+      setTimeout(() => {
+        setSaveSuccessMsg(null);
+      }, 7000);
+    } catch (err: any) {
+      alert(`შენახვის შეცდომა: ${err.message || 'დაფიქსირდა შეცდომა'}`);
+    } finally {
+      setIsSaving(false);
     }
-
-    // Auto-adjust filters so the user ALWAYS sees their dish immediately
-    setChannelFilter('all');
-    setDayFilter('all');
-    setLastAddedDishId(targetId);
-    setIsModalOpen(false);
-
-    // Auto-dismiss success notification after 7s
-    setTimeout(() => {
-      setSaveSuccessMsg(null);
-    }, 7000);
   };
 
   const toggleChannel = (ch: 'site' | 'pos') => {
@@ -491,10 +669,24 @@ export const AdminDishesManager: React.FC = () => {
         <div>
           <h1 className="admin-page-title">კერძების ბაზა & კვირის მენიუ</h1>
           <p className="admin-page-subtitle">
-            კერძების დამატება მთავარი საიტის რაციონებისთვის (დღეების მიხედვით) და დარბაზების ვიტრინებისთვის
+            კერძების მართვა საიტის რაციონებისთვის (დღეების მიხედვით), დარბაზის POS ვიტრინისთვის და Supabase Storage ფოტოებისთვის
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => {
+              checkStorage();
+              setIsStorageModalOpen(true);
+            }}
+            className="admin-btn-secondary"
+            style={{
+              borderColor: imageStats.base64Blobs > 0 ? '#F59E0B' : '#10B981',
+              color: imageStats.base64Blobs > 0 ? '#FBBF24' : '#34D399',
+            }}
+            title="Supabase Storage სტატუსი & BLOB ფოტოების მიგრაცია"
+          >
+            🗄️ Storage & მიგრაცია {imageStats.base64Blobs > 0 ? `(${imageStats.base64Blobs} BLOB)` : '✓'}
+          </button>
           <button
             onClick={() => refreshDishes()}
             disabled={isLoadingDishes}
@@ -518,6 +710,51 @@ export const AdminDishesManager: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Supabase Storage Notice Banner if there are unmigrated BLOBs */}
+      {imageStats.base64Blobs > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(180, 83, 9, 0.25))',
+          border: '1px solid #F59E0B',
+          borderRadius: '10px',
+          padding: '12px 18px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: '#FDE68A',
+          fontSize: '13.5px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '20px' }}>⚡</span>
+            <div>
+              <b>ბაზაში ნაპოვნია {imageStats.base64Blobs} მძიმე Base64 ფოტო (~{imageStats.base64Blobs * 3.5} MB).</b>
+              <span style={{ opacity: 0.85, marginLeft: '6px' }}>
+                გადაიტანეთ ისინი Supabase Storage-ში SQL ბაზის სრული განტვირთვისა და მყისიერი ჩატვირთვისთვის.
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              checkStorage();
+              setIsStorageModalOpen(true);
+            }}
+            style={{
+              background: '#F59E0B',
+              color: '#451A03',
+              fontWeight: 800,
+              fontSize: '12px',
+              border: 'none',
+              padding: '6px 14px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            მიგრაციის გაშვება →
+          </button>
+        </div>
+      )}
 
       {/* Success notification banner */}
       {saveSuccessMsg && (
@@ -571,13 +808,13 @@ export const AdminDishesManager: React.FC = () => {
               onClick={() => setChannelFilter('site')}
               className={`filter-toggle-btn ${channelFilter === 'site' ? 'active' : ''}`}
             >
-              🌐 საიტის რაციონები ({dishes.filter(d => d.targetChannels.includes('site')).length})
+              🌐 საიტის რაციონები ({dishes.filter(d => (d.targetChannels || ['site', 'pos']).includes('site')).length})
             </button>
             <button
               onClick={() => setChannelFilter('pos')}
               className={`filter-toggle-btn ${channelFilter === 'pos' ? 'active' : ''}`}
             >
-              🏢 წერტილების ვიტრინა ({dishes.filter(d => d.targetChannels.includes('pos')).length})
+              🏢 წერტილების ვიტრინა ({dishes.filter(d => (d.targetChannels || ['site', 'pos']).includes('pos')).length})
             </button>
           </div>
         </div>
@@ -635,6 +872,13 @@ export const AdminDishesManager: React.FC = () => {
             <span> (ნაჩვენებია ფილტრით: <b style={{ color: '#10B981' }}>{filteredDishes.length}</b>)</span>
           )}
         </div>
+        <div style={{ display: 'flex', gap: '14px' }}>
+          <span>🗄️ Storage ფოტოები: <b style={{ color: '#34D399' }}>{imageStats.storageUrls}</b></span>
+          {imageStats.base64Blobs > 0 && (
+            <span>⚠️ BLOB ფოტოები: <b style={{ color: '#FBBF24' }}>{imageStats.base64Blobs}</b></span>
+          )}
+          <span>🖼️ გალერეა: <b style={{ color: '#9CA3AF' }}>{imageStats.presets}</b></span>
+        </div>
       </div>
 
       {/* Empty State */}
@@ -675,8 +919,9 @@ export const AdminDishesManager: React.FC = () => {
         <div className="admin-dishes-grid">
           {filteredDishes.map((dish) => {
             const dayName = DAYS_MAP.find(d => d.id === dish.day)?.label || 'ორშაბათი';
-            const margin = dish.retailPrice - dish.costPrice;
+            const margin = (dish.retailPrice || 0) - (dish.costPrice || 0);
             const isJustAdded = dish.id === lastAddedDishId;
+            const isStorageImage = dish.image?.includes('supabase.co/storage');
 
             return (
               <div 
@@ -689,13 +934,11 @@ export const AdminDishesManager: React.FC = () => {
                 } : undefined}
               >
                 <div className="admin-dish-image-wrapper">
-                  <Image
-                    src={dish.image || '/images/meals/chicken-ptitim.webp'}
+                  <LazyProductImage
+                    productId={dish.id}
+                    src={dish.image}
                     alt={dish.name?.ka || dish.name?.ru || 'კერძი'}
-                    fill
-                    style={{ objectFit: 'cover' }}
                     sizes="(max-width: 768px) 100vw, 350px"
-                    unoptimized={dish.image?.startsWith('data:') || dish.image?.startsWith('http')}
                   />
                   <div className="admin-dish-badges-overlay">
                     {isJustAdded && (
@@ -709,6 +952,18 @@ export const AdminDishesManager: React.FC = () => {
                         boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                       }}>
                         ✨ ახალი
+                      </span>
+                    )}
+                    {isStorageImage && (
+                      <span style={{
+                        background: 'rgba(16, 185, 129, 0.9)',
+                        color: '#FFFFFF',
+                        fontWeight: 700,
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                      }} title="ფოტო ინახება Supabase Storage-ში">
+                        ☁️ Storage
                       </span>
                     )}
                     {(!dish.targetChannels || dish.targetChannels.includes('site')) && <span className="channel-badge badge-site">🌐 საიტი</span>}
@@ -735,19 +990,19 @@ export const AdminDishesManager: React.FC = () => {
                   {/* KBJU Strip */}
                   <div className="admin-kbju-strip">
                     <div className="kbju-box cal">
-                      <span className="kbju-num">{dish.macros.calories}</span>
+                      <span className="kbju-num">{dish.macros?.calories || 0}</span>
                       <span className="kbju-lbl">კკალ</span>
                     </div>
                     <div className="kbju-box p">
-                      <span className="kbju-num">{dish.macros.protein}გ</span>
+                      <span className="kbju-num">{dish.macros?.protein || 0}გ</span>
                       <span className="kbju-lbl">ცილა</span>
                     </div>
                     <div className="kbju-box f">
-                      <span className="kbju-num">{dish.macros.fat}გ</span>
+                      <span className="kbju-num">{dish.macros?.fat || 0}გ</span>
                       <span className="kbju-lbl">ცხიმი</span>
                     </div>
                     <div className="kbju-box c">
-                      <span className="kbju-num">{dish.macros.carbs}გ</span>
+                      <span className="kbju-num">{dish.macros?.carbs || 0}გ</span>
                       <span className="kbju-lbl">ნახშ</span>
                     </div>
                   </div>
@@ -756,11 +1011,11 @@ export const AdminDishesManager: React.FC = () => {
                   <div className="admin-dish-finance-row">
                     <div className="price-item">
                       <span className="price-label">თვითღირებულება:</span>
-                      <span className="price-cost">{dish.costPrice.toFixed(1)} ₾</span>
+                      <span className="price-cost">{(dish.costPrice || 0).toFixed(1)} ₾</span>
                     </div>
                     <div className="price-item">
                       <span className="price-label">გასაყიდი:</span>
-                      <span className="price-retail">{dish.retailPrice.toFixed(1)} ₾</span>
+                      <span className="price-retail">{(dish.retailPrice || 0).toFixed(1)} ₾</span>
                     </div>
                     <div className="margin-item">
                       <span className="margin-pill">+{margin.toFixed(1)} ₾</span>
@@ -796,12 +1051,13 @@ export const AdminDishesManager: React.FC = () => {
                       ✏️ რედაქტირება
                     </button>
                     <button 
-                      onClick={() => {
-                        if (confirm(`წაიშალოს კერძი «${dish.name.ka}»?`)) {
-                          deleteDish(dish.id);
+                      onClick={async () => {
+                        if (confirm(`წაიშალოს კერძი «${dish.name.ka}» ბაზიდან?`)) {
+                          await deleteDish(dish.id);
                         }
                       }} 
                       className="btn-dish-delete"
+                      title="კერძის წაშლა"
                     >
                       🗑️
                     </button>
@@ -810,6 +1066,189 @@ export const AdminDishesManager: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal: Supabase Storage Manager & BLOB Migration */}
+      {isStorageModalOpen && (
+        <div className="admin-modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="admin-modal-container" style={{ maxWidth: '680px' }}>
+            <div className="admin-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '22px' }}>🗄️</span>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '18px' }}>Supabase Storage & ფოტოების მართვა</h2>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9CA3AF' }}>
+                    ფოტოების ატვირთვა Supabase Storage-ში (<code style={{ color: '#10B981' }}>product-images</code>) და SQL ბაზის განტვირთვა
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setIsStorageModalOpen(false)} className="modal-close-btn">×</button>
+            </div>
+
+            <div style={{ padding: '20px' }}>
+              {/* Storage Bucket Status Card */}
+              <div style={{
+                background: '#111827',
+                border: storageStatus.exists ? '1px solid #10B981' : '1px solid #F59E0B',
+                borderRadius: '10px',
+                padding: '14px 18px',
+                marginBottom: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '16px' }}>{storageStatus.exists ? '🟢' : '🟡'}</span>
+                    <span style={{ fontWeight: 700, fontSize: '14px', color: '#F3F4F6' }}>
+                      Storage Bucket: <code style={{ color: '#10B981' }}>product-images</code>
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '4px' }}>
+                    {storageStatus.checking ? 'სტატუსის შემოწმება...' :
+                     storageStatus.exists ? '✓ Bucket შექმნილია და მზადაა პირდაპირი ატვირთვებისთვის' :
+                     'Bucket ჯერ არ არის შექმნილი Supabase-ში. შეასრულეთ 1-წამიანი SQL სკრიპტი ქვემოთ.'}
+                  </div>
+                </div>
+                <button
+                  onClick={checkStorage}
+                  disabled={storageStatus.checking}
+                  className="admin-btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                >
+                  {storageStatus.checking ? '⏳...' : '🔄 შემოწმება'}
+                </button>
+              </div>
+
+              {/* Statistics Overview */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '18px' }}>
+                <div style={{ background: '#0D131F', padding: '12px', borderRadius: '8px', border: '1px solid #1F2937', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#34D399' }}>{imageStats.storageUrls}</div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>☁️ Storage ფოტოები</div>
+                </div>
+                <div style={{ background: '#0D131F', padding: '12px', borderRadius: '8px', border: '1px solid #1F2937', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: imageStats.base64Blobs > 0 ? '#FBBF24' : '#9CA3AF' }}>
+                    {imageStats.base64Blobs}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>⚠️ SQL Base64 BLOB</div>
+                </div>
+                <div style={{ background: '#0D131F', padding: '12px', borderRadius: '8px', border: '1px solid #1F2937', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#60A5FA' }}>{imageStats.presets}</div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>🖼️ ლოკალური გალერეა</div>
+                </div>
+              </div>
+
+              {/* Automated Migration Action */}
+              {imageStats.base64Blobs > 0 && (
+                <div style={{
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid #F59E0B',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  marginBottom: '18px',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#FDE68A', fontSize: '14px' }}>
+                        🚀 ავტომატური მიგრაცია Storage-ში
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#D1D5DB', marginTop: '2px' }}>
+                        ყველა Base64 BLOB დაკომპრესდება WebP ფორმატში, აიტვირთება Storage-ში და ბაზაში ჩაიწერება მოკლე URL.
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleRunMigration}
+                      disabled={isMigrating || !storageStatus.exists}
+                      className="admin-btn-primary"
+                      style={{
+                        background: storageStatus.exists ? '#F59E0B' : '#4B5563',
+                        color: storageStatus.exists ? '#451A03' : '#9CA3AF',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap',
+                        cursor: storageStatus.exists ? 'pointer' : 'not-allowed'
+                      }}
+                      title={!storageStatus.exists ? 'ჯერ შეასრულეთ SQL სკრიპტი Bucket-ის შესაქმნელად' : 'მიგრაციის დაწყება'}
+                    >
+                      {isMigrating ? '⏳ მიგრაცია...' : !storageStatus.exists ? '⚠️ ჯერ შექმენით Bucket' : '🚀 დაწყება'}
+                    </button>
+                  </div>
+
+                  {/* Migration Progress Bar */}
+                  {isMigrating && migrationProgress && (
+                    <div style={{ marginTop: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#FDE68A', marginBottom: '4px' }}>
+                        <span>იტვირთება: {migrationProgress.dishName}</span>
+                        <span>{migrationProgress.current} / {migrationProgress.total}</span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', background: '#374151', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${(migrationProgress.current / Math.max(migrationProgress.total, 1)) * 100}%`,
+                          height: '100%',
+                          background: '#10B981',
+                          transition: 'width 0.3s ease',
+                        }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Migration Result */}
+                  {migrationResult && (
+                    <div style={{ marginTop: '12px', fontSize: '12px', color: migrationResult.errors.length > 0 ? '#FCA5A5' : '#34D399' }}>
+                      {migrationResult.errors.length === 0 ? (
+                        <span>✓ წარმატებით გადავიდა {migrationResult.migrated} კერძის ფოტო Storage-ში!</span>
+                      ) : (
+                        <span>⚠️ დასრულდა შეცდომებით ({migrationResult.migrated} წარმატებული, {migrationResult.errors.length} შეცდომა): {migrationResult.errors.join(', ')}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SQL Instructions for 1-click Setup */}
+              {!storageStatus.exists && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#E5E7EB' }}>
+                      📝 Supabase SQL სკრიპტი Bucket-ის გასააქტიურებლად:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(STORAGE_SETUP_SQL);
+                        setCopiedSql(true);
+                        setTimeout(() => setCopiedSql(false), 3000);
+                      }}
+                      className="json-template-btn"
+                      style={{ fontSize: '11px', padding: '4px 10px' }}
+                    >
+                      {copiedSql ? '✓ დაკოპირდა!' : '📋 SQL-ის კოპირება'}
+                    </button>
+                  </div>
+                  <textarea
+                    readOnly
+                    value={STORAGE_SETUP_SQL}
+                    rows={8}
+                    className="json-code-textarea"
+                    style={{ fontSize: '11.5px', color: '#34D399', background: '#0D1117' }}
+                  />
+                  <div style={{ fontSize: '11.5px', color: '#9CA3AF', marginTop: '6px', lineHeight: '1.4' }}>
+                    💡 გახსენით <b style={{ color: '#E5E7EB' }}>Supabase Dashboard → SQL Editor → New Query</b>, ჩასვით ეს კოდი და დააჭირეთ <b>RUN</b>. ამის შემდეგ დააჭირეთ ზემოთ «🔄 შემოწმება».
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="admin-modal-footer">
+              <button
+                type="button"
+                onClick={() => setIsStorageModalOpen(false)}
+                className="admin-btn-primary"
+              >
+                დახურვა
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -870,7 +1309,7 @@ export const AdminDishesManager: React.FC = () => {
               {/* Photo Uploader */}
               <div className="form-row">
                 <div className="form-col full-width">
-                  <label className="form-label">კერძის ფოტო</label>
+                  <label className="form-label">კერძის ფოტო (ავტომატური Storage ატვირთვა & კომპრესია)</label>
                   
                   <div className="photo-uploader-box">
                     {/* Tabs */}
@@ -906,16 +1345,32 @@ export const AdminDishesManager: React.FC = () => {
                           alt="კერძის გადახედვა"
                           fill
                           style={{ objectFit: 'cover' }}
-                          unoptimized={formImage.startsWith('data:') || formCustomUrl.startsWith('http')}
+                          unoptimized={formImage.startsWith('data:') || formCustomUrl.startsWith('http') || formImage.startsWith('http')}
                         />
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '13px', fontWeight: 700, color: '#F9FAFB' }}>
-                          {uploadedFileName ? `✓ ატვირთულია: ${uploadedFileName}` : formCustomUrl ? '✓ მითითებულია პირდაპირი URL' : '✓ არჩეულია კატალოგის ფოტო'}
+                          {isUploadingImage ? '⏳ სურათი მუშავდება და იტვირთება Storage-ში...' :
+                           formImage.includes('supabase.co/storage') ? '✓ ატვირთულია Supabase Storage-ში' :
+                           uploadedFileName ? `✓ არჩეულია ფაილი: ${uploadedFileName}` :
+                           formCustomUrl ? '✓ მითითებულია პირდაპირი URL' :
+                           '✓ არჩეულია კატალოგის ფოტო'}
                         </div>
                         <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
-                          ეს სურათი გამოჩნდება საიტის კალათაში, მენიუს ბარათსა და POS ტერმინალში.
+                          სურათი ოპტიმიზირდება WebP ფორმატში მაქსიმალური სისწრაფისთვის.
                         </div>
+
+                        {imageUploadNotice && (
+                          <div style={{
+                            marginTop: '6px',
+                            fontSize: '11.5px',
+                            fontWeight: 600,
+                            color: imageUploadNotice.type === 'success' ? '#34D399' :
+                                   imageUploadNotice.type === 'warn' ? '#FBBF24' : '#F87171'
+                          }}>
+                            {imageUploadNotice.text}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -947,9 +1402,11 @@ export const AdminDishesManager: React.FC = () => {
                             if (file) handleFileUpload(file);
                           }}
                         >
-                          <div className="dropzone-icon">📸</div>
-                          <div className="dropzone-text">დააჭირეთ ფოტოს ასარჩევად ან ჩააგდეთ ფაილი აქ</div>
-                          <div className="dropzone-sub">მხარდაჭერილია JPG, PNG, WEBP (ტელეფონიდან ან კომპიუტერიდან)</div>
+                          <div className="dropzone-icon">{isUploadingImage ? '⏳' : '📸'}</div>
+                          <div className="dropzone-text">
+                            {isUploadingImage ? 'მიმდინარეობს ატვირთვა...' : 'დააჭირეთ ფოტოს ასარჩევად ან ჩააგდეთ ფაილი აქ'}
+                          </div>
+                          <div className="dropzone-sub">ავტომატური კონვერტაცია მსუბუქ WebP ფორმატში და ატვირთვა Supabase Storage-ში</div>
                         </div>
                       </div>
                     )}
@@ -964,6 +1421,7 @@ export const AdminDishesManager: React.FC = () => {
                               setFormImage(img.url);
                               setFormCustomUrl('');
                               setUploadedFileName('');
+                              setImageUploadNotice(null);
                             }}
                             className={`preset-thumb ${formImage === img.url && !formCustomUrl ? 'selected' : ''}`}
                           >
@@ -1180,8 +1638,20 @@ export const AdminDishesManager: React.FC = () => {
                 )}
               </div>
 
-              {/* Day of Week & Meal Category */}
+              {/* Category, Day of Week & Cooking Method */}
               <div className="form-grid-3">
+                <div className="form-col">
+                  <label className="form-label">კატეგორია</label>
+                  <select
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value as DishCategory)}
+                    className="admin-select-input"
+                  >
+                    {CATEGORY_OPTIONS.map(c => (
+                      <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+                    ))}
+                  </select>
+                </div>
                 <div className="form-col">
                   <label className="form-label">კვირის დღე (მენიუსთვის)</label>
                   <select
@@ -1201,13 +1671,16 @@ export const AdminDishesManager: React.FC = () => {
                     onChange={(e) => setFormMealType(e.target.value as MealType)}
                     className="admin-select-input"
                   >
-                    <option value="breakfast">საუზმე</option>
-                    <option value="lunch">სადილი</option>
-                    <option value="snack">სამხარი</option>
-                    <option value="dinner">ვახშამი</option>
-                    <option value="dessert">დესერტი</option>
+                    <option value="breakfast">🥞 საუზმე</option>
+                    <option value="lunch">🍲 სადილი</option>
+                    <option value="snack">🥪 სამხარი</option>
+                    <option value="dinner">🥗 ვახშამი</option>
+                    <option value="dessert">🧁 დესერტი</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="form-grid-2">
                 <div className="form-col">
                   <label className="form-label">მომზადების ტექნოლოგია</label>
                   <select
@@ -1222,13 +1695,25 @@ export const AdminDishesManager: React.FC = () => {
                     <option value="raw">ნატურალური / ცოცხალი</option>
                   </select>
                 </div>
+                <div className="form-col">
+                  <label className="form-label">⚖️ პორციის წონა (გ) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="10"
+                    value={formWeight}
+                    onChange={(e) => setFormWeight(Number(e.target.value))}
+                    className="admin-input"
+                    placeholder="მაგ: 320"
+                  />
+                </div>
               </div>
 
-              {/* Exact KBJU Inputs (Calories, Protein, Fat, Carbs, Weight) */}
+              {/* Exact KBJU Inputs (Calories, Protein, Fat, Carbs) */}
               <div className="kbju-inputs-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label className="form-section-title" style={{ margin: 0 }}>
-                    🔥 კბჟუ და კალორიულობა (კალორიები, ცილა, ცხიმი, ნახშირწყლები, პორციის წონა)
+                    🔥 კბჟუ და კალორიულობა (კალორიები, ცილა, ცხიმი, ნახშირწყლები)
                   </label>
                   <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600 }}>
                     საიტისა და POS ვიტრინისთვის
@@ -1289,19 +1774,6 @@ export const AdminDishesManager: React.FC = () => {
                       onChange={(e) => setFormCarbs(Number(e.target.value))}
                       className="admin-input-num"
                       placeholder="მაგ: 45"
-                    />
-                  </div>
-
-                  <div className="kbju-input-group">
-                    <label>⚖️ პორციის წონა (გ) *</label>
-                    <input
-                      type="number"
-                      required
-                      min="10"
-                      value={formWeight}
-                      onChange={(e) => setFormWeight(Number(e.target.value))}
-                      className="admin-input-num"
-                      placeholder="მაგ: 320"
                     />
                   </div>
                 </div>
@@ -1367,11 +1839,11 @@ export const AdminDishesManager: React.FC = () => {
               </div>
 
               <div className="admin-modal-footer">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="admin-btn-secondary">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="admin-btn-secondary" disabled={isSaving}>
                   გაუქმება
                 </button>
-                <button type="submit" className="admin-btn-primary">
-                  💾 შენახვა
+                <button type="submit" className="admin-btn-primary" disabled={isSaving}>
+                  {isSaving ? '💾 ინახება...' : '💾 შენახვა'}
                 </button>
               </div>
             </form>

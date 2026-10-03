@@ -11,7 +11,6 @@ import {
 } from '@/types/partner';
 import { 
   initialPartnerPoints, 
-  partnerProducts, 
   initialStocks, 
   initialShipments, 
   initialSales, 
@@ -67,8 +66,9 @@ interface PartnerContextType {
   refundSale: (saleId: string, reason?: string) => boolean;
   createWriteOff: (pointId: string, productId: string, quantity: number, reason: 'expired' | 'damaged' | 'sample' | 'other', note?: string) => boolean;
 
-  // HQ Admin actions (automatically credits stock to point)
+  // HQ Admin & Point actions
   createShipment: (pointId: string, items: { productId: string; quantity: number }[], note?: string) => PartnerShipment;
+  quickRestockPoint: (pointId: string, unitsPerDish?: number) => PartnerShipment;
   addNewPoint: (point: Omit<PartnerPoint, 'id'>) => PartnerPoint;
   
   // Quick getters
@@ -76,6 +76,7 @@ interface PartnerContextType {
   getPointTodaySales: (pointId: string) => PartnerSale[];
   getPointSalesByPeriod: (pointId: string, days?: number) => PartnerSale[];
   resetToDefaults: () => void;
+  refreshData: () => Promise<void>;
 }
 
 const PartnerContext = createContext<PartnerContextType | undefined>(undefined);
@@ -83,78 +84,81 @@ const PartnerContext = createContext<PartnerContextType | undefined>(undefined);
 export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [points, setPoints] = useState<PartnerPoint[]>(initialPartnerPoints);
   const [products, setProducts] = useState<PartnerProduct[]>([]);
-  const [stocks, setStocks] = useState<Record<string, Record<string, number>>>({});
-  const [shipments, setShipments] = useState<PartnerShipment[]>([]);
-  const [sales, setSales] = useState<PartnerSale[]>([]);
-  const [writeOffs, setWriteOffs] = useState<PartnerWriteOff[]>([]);
+  const [stocks, setStocks] = useState<Record<string, Record<string, number>>>(initialStocks);
+  const [shipments, setShipments] = useState<PartnerShipment[]>(initialShipments);
+  const [sales, setSales] = useState<PartnerSale[]>(initialSales);
+  const [writeOffs, setWriteOffs] = useState<PartnerWriteOff[]>(initialWriteOffs);
 
   const [currentPoint, setCurrentPoint] = useState<PartnerPoint | null>(initialPartnerPoints[0]);
   const [currentRole, setCurrentRole] = useState<PartnerRole>('manager');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [isLoaded, setIsLoaded] = useState<boolean>(true);
 
+  const loadAllData = async () => {
+    // 1. Products (Strictly and dynamically from Supabase database `partner_products`)
+    try {
+      const dbProducts = await partnerDbService.getProducts();
+      setProducts(dbProducts || []);
+    } catch (e) {
+      console.warn('Supabase products fetch error:', e);
+      setProducts([]);
+    }
+
+    // 2. Points
+    try {
+      const dbPoints = await partnerDbService.getPoints();
+      if (dbPoints && dbPoints.length > 0) {
+        setPoints(dbPoints);
+        if (!currentPoint) setCurrentPoint(dbPoints[0]);
+      } else {
+        setPoints(initialPartnerPoints);
+        if (!currentPoint) setCurrentPoint(initialPartnerPoints[0]);
+      }
+    } catch (e) {
+      console.warn('Supabase points fetch error, using fallback:', e);
+      setPoints(initialPartnerPoints);
+    }
+
+    // 3. Stocks
+    try {
+      const dbStocks = await partnerDbService.getStocks();
+      if (dbStocks && Object.keys(dbStocks).length > 0) {
+        setStocks(dbStocks);
+      }
+    } catch (e) {
+      console.warn('Supabase stocks fetch error:', e);
+    }
+
+    // 4. Sales
+    try {
+      const dbSales = await partnerDbService.getSales();
+      if (dbSales) setSales(dbSales);
+    } catch (e) {
+      console.warn('Supabase sales fetch error:', e);
+    }
+
+    // 5. Shipments
+    try {
+      const dbShipments = await partnerDbService.getShipments();
+      if (dbShipments) setShipments(dbShipments);
+    } catch (e) {
+      console.warn('Supabase shipments fetch error:', e);
+    }
+
+    // 6. WriteOffs
+    try {
+      const dbWriteOffs = await partnerDbService.getWriteOffs();
+      if (dbWriteOffs) setWriteOffs(dbWriteOffs);
+    } catch (e) {
+      console.warn('Supabase writeoffs fetch error:', e);
+    }
+  };
+
   // Load directly from Supabase on mount
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
-
-    const loadAllData = async () => {
-      // 1. Products (Always load first)
-      try {
-        const dbProducts = await partnerDbService.getProducts();
-        if (dbProducts && dbProducts.length > 0) {
-          setProducts(dbProducts);
-        }
-      } catch (e) {
-        console.warn('Supabase products fetch error:', e);
-      }
-
-      // 2. Points
-      try {
-        const dbPoints = await partnerDbService.getPoints();
-        if (dbPoints && dbPoints.length > 0) {
-          setPoints(dbPoints);
-          if (!currentPoint) setCurrentPoint(dbPoints[0]);
-        }
-      } catch (e) {
-        console.warn('Supabase points fetch error:', e);
-      }
-
-      // 3. Stocks
-      try {
-        const dbStocks = await partnerDbService.getStocks();
-        if (dbStocks && Object.keys(dbStocks).length > 0) {
-          setStocks(dbStocks);
-        }
-      } catch (e) {
-        console.warn('Supabase stocks fetch error:', e);
-      }
-
-      // 4. Sales
-      try {
-        const dbSales = await partnerDbService.getSales();
-        if (dbSales) setSales(dbSales);
-      } catch (e) {
-        console.warn('Supabase sales fetch error:', e);
-      }
-
-      // 5. Shipments
-      try {
-        const dbShipments = await partnerDbService.getShipments();
-        if (dbShipments) setShipments(dbShipments);
-      } catch (e) {
-        console.warn('Supabase shipments fetch error:', e);
-      }
-
-      // 6. WriteOffs
-      try {
-        const dbWriteOffs = await partnerDbService.getWriteOffs();
-        if (dbWriteOffs) setWriteOffs(dbWriteOffs);
-      } catch (e) {
-        console.warn('Supabase writeoffs fetch error:', e);
-      }
-    };
-
     loadAllData();
+
+    if (!isSupabaseConfigured) return;
 
     // Realtime listener for products, sales, stocks, shipments
     try {
@@ -234,7 +238,10 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const getPointStock = (pointId: string, productId: string): number => {
-    return stocks[pointId]?.[productId] ?? 25;
+    if (stocks[pointId] && stocks[pointId][productId] !== undefined) {
+      return stocks[pointId][productId];
+    }
+    return 20; // Default healthy shelf stock
   };
 
   // Complete a sale from POS with discounts and split payments
@@ -249,7 +256,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }: CompleteSaleParams): PartnerSale => {
     const saleItems = items.map(item => ({
       productId: item.product.id,
-      productName: item.product.name.ka || item.product.name.ru,
+      productName: item.product.name.ka || item.product.name.ru || item.product.name.en,
       quantity: item.quantity,
       pricePerUnit: item.product.price,
       totalPrice: item.product.price * item.quantity,
@@ -295,7 +302,8 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setStocks(prev => {
       const pointStock = { ...(prev[pointId] || {}) };
       items.forEach(i => {
-        const newQty = Math.max(0, (pointStock[i.product.id] || 0) - i.quantity);
+        const currentQty = pointStock[i.product.id] !== undefined ? pointStock[i.product.id] : getPointStock(pointId, i.product.id);
+        const newQty = Math.max(0, currentQty - i.quantity);
         pointStock[i.product.id] = newQty;
         partnerDbService.updateStock(pointId, i.product.id, newQty);
       });
@@ -357,11 +365,13 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const pointStock = { ...(prev[pointId] || {}) };
         // 1. Return old items to shelf
         targetSale.items.forEach(oldIt => {
-          pointStock[oldIt.productId] = (pointStock[oldIt.productId] || 0) + oldIt.quantity;
+          const currentQty = pointStock[oldIt.productId] !== undefined ? pointStock[oldIt.productId] : getPointStock(pointId, oldIt.productId);
+          pointStock[oldIt.productId] = currentQty + oldIt.quantity;
         });
         // 2. Deduct new items from shelf
         items.forEach(newIt => {
-          pointStock[newIt.productId] = Math.max(0, (pointStock[newIt.productId] || 0) - newIt.quantity);
+          const currentQty = pointStock[newIt.productId] !== undefined ? pointStock[newIt.productId] : getPointStock(pointId, newIt.productId);
+          pointStock[newIt.productId] = Math.max(0, currentQty - newIt.quantity);
         });
         // 3. Sync all affected items to Supabase
         [...targetSale.items, ...items].forEach(it => {
@@ -445,7 +455,8 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setStocks(prev => {
         const pointStock = { ...(prev[pointId] || {}) };
         targetSale.items.forEach(it => {
-          const newQty = (pointStock[it.productId] || 0) + it.quantity;
+          const currentQty = pointStock[it.productId] !== undefined ? pointStock[it.productId] : getPointStock(pointId, it.productId);
+          const newQty = currentQty + it.quantity;
           pointStock[it.productId] = newQty;
           partnerDbService.updateStock(pointId, it.productId, newQty);
         });
@@ -469,7 +480,8 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setStocks(prev => {
       const pointStock = { ...(prev[pointId] || {}) };
       targetSale.items.forEach(item => {
-        const newQty = (pointStock[item.productId] || 0) + item.quantity;
+        const currentQty = pointStock[item.productId] !== undefined ? pointStock[item.productId] : getPointStock(pointId, item.productId);
+        const newQty = currentQty + item.quantity;
         pointStock[item.productId] = newQty;
         partnerDbService.updateStock(pointId, item.productId, newQty);
       });
@@ -523,7 +535,8 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setStocks(prev => {
       const pointStock = { ...(prev[pointId] || {}) };
-      const newQty = Math.max(0, (pointStock[productId] || 0) - quantity);
+      const currentQty = pointStock[productId] !== undefined ? pointStock[productId] : getPointStock(pointId, productId);
+      const newQty = Math.max(0, currentQty - quantity);
       pointStock[productId] = newQty;
       partnerDbService.updateStock(pointId, productId, newQty);
       return { ...prev, [pointId]: pointStock };
@@ -534,7 +547,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return true;
   };
 
-  // HQ Admin allocates food to a point: AUTOMATICALLY CREDITS STOCK IMMEDIATELY!
+  // HQ Admin or Point Manager receives food to a point: AUTOMATICALLY CREDITS STOCK IMMEDIATELY!
   const createShipment = (
     pointId: string,
     items: { productId: string; quantity: number }[],
@@ -544,7 +557,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const prod = products.find(p => p.id === item.productId);
       return {
         productId: item.productId,
-        productName: prod?.name.ru || 'Рацион FitFood',
+        productName: prod?.name.ka || prod?.name.ru || 'Рацион FitFood',
         quantity: item.quantity,
       };
     });
@@ -568,7 +581,8 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setStocks(prev => {
       const pointStock = { ...(prev[pointId] || {}) };
       items.forEach(item => {
-        const newQty = (pointStock[item.productId] || 0) + item.quantity;
+        const currentQty = pointStock[item.productId] !== undefined ? pointStock[item.productId] : getPointStock(pointId, item.productId);
+        const newQty = currentQty + item.quantity;
         pointStock[item.productId] = newQty;
         partnerDbService.updateStock(pointId, item.productId, newQty);
       });
@@ -578,6 +592,15 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setShipments(prev => [newShipment, ...prev]);
     partnerDbService.saveShipment(newShipment);
     return newShipment;
+  };
+
+  // Quick Restock Action for the Point
+  const quickRestockPoint = (pointId: string, unitsPerDish: number = 20): PartnerShipment => {
+    const shipmentItems = products.map(p => ({
+      productId: p.id,
+      quantity: unitsPerDish,
+    }));
+    return createShipment(pointId, shipmentItems, `სწრაფი შევსება (+${unitsPerDish} ც. თითოეულზე)`);
   };
 
   const addNewPoint = (pointData: Omit<PartnerPoint, 'id'>): PartnerPoint => {
@@ -636,11 +659,13 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         refundSale,
         createWriteOff,
         createShipment,
+        quickRestockPoint,
         addNewPoint,
         getPointStock,
         getPointTodaySales,
         getPointSalesByPeriod,
         resetToDefaults,
+        refreshData: loadAllData,
       }}
     >
       {children}

@@ -38,10 +38,10 @@ export const ReceiptsHistoryView: React.FC = () => {
     // Search Query
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
-    const receiptNum = sale.receiptNumber.toLowerCase();
-    const itemsMatch = sale.items.some(it => it.productName.toLowerCase().includes(q));
+    const receiptNum = (sale.receiptNumber || '').toLowerCase();
+    const itemsMatch = (sale.items || []).some(it => (it.productName || '').toLowerCase().includes(q));
     const commentMatch = (sale.discountComment || '').toLowerCase().includes(q);
-    const amountMatch = `${sale.totalAmount}`.includes(q);
+    const amountMatch = `${sale.totalAmount || 0}`.includes(q);
     return receiptNum.includes(q) || itemsMatch || commentMatch || amountMatch;
   });
 

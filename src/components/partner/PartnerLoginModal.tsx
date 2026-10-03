@@ -68,7 +68,7 @@ export const PartnerLoginModal: React.FC<PartnerLoginModalProps> = ({ isOpen, on
           >
             {points.map(p => (
               <option key={p.id} value={p.id}>
-                {p.name.ka}
+                📍 {p.name?.ka || p.name?.ru || 'წერტილი'} ({p.address?.ka || p.address?.ru})
               </option>
             ))}
           </select>
@@ -126,6 +126,13 @@ export const PartnerLoginModal: React.FC<PartnerLoginModalProps> = ({ isOpen, on
               </button>
             );
           })}
+        </div>
+
+        {/* Quick PIN hints */}
+        <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #282E3A', fontSize: '11.5px', color: '#94A3B8', textAlign: 'center', lineHeight: '1.5' }}>
+          <div>🏢 ოფისი / Admin PIN: <strong style={{ color: '#10B981' }}>0000</strong></div>
+          <div style={{ marginTop: '2px' }}>💼 მოლარე: <strong>1111</strong> (Mega Gym) • <strong>2222</strong> (XXL) • <strong>3333</strong> (Fitness Academy)</div>
+          <div style={{ marginTop: '2px' }}>👑 მენეჯერი: <strong>7777</strong> (Mega Gym) • <strong>8888</strong> (XXL) • <strong>9999</strong> (Fitness Academy)</div>
         </div>
       </div>
     </div>

@@ -32,25 +32,72 @@ export const partnerDbService = {
     }
   },
 
-  // 2. Fetch Products
+  // 2. Fetch Products (Lightweight metadata query - loads instantly without heavy base64 blobs)
   async getProducts(): Promise<PartnerProduct[] | null> {
     if (!isSupabaseConfigured) return null;
     try {
-      const { data, error } = await supabase.from('partner_products').select('*');
-      if (error || !data) return null;
+      const { data, error } = await supabase
+        .from('partner_products')
+        .select('id, name, category, category_name, price, cost_price, calories, weight_grams, image, badge, created_at, slug, description, meal_type, day, protein, fat, carbs, ingredients, allergens, cooking_method, target_channels, updated_at');
+      if (error || !data || data.length === 0) return null;
       return data.map(prod => {
         const dish = mapSupabaseProductToAdminDish(prod);
+
+        // Normalize Category
+        const rawCat = (prod.category || dish.category || 'poultry').toLowerCase();
+        let cat = 'poultry';
+        let defaultCatName = { ka: 'ქათამი / კვება', ru: 'Птица / Питание', en: 'Poultry / Meals' };
+
+        if (rawCat.includes('fish') || rawCat.includes('seafood') || rawCat.includes('თევზ') || rawCat.includes('рыб')) {
+          cat = 'fish';
+          defaultCatName = { ka: 'თევზი და ზღვის პროდუქტები', ru: 'Рыба и Морепродукты', en: 'Fish & Seafood' };
+        } else if (rawCat.includes('meat') || rawCat.includes('beef') || rawCat.includes('pork') || rawCat.includes('ხორც') || rawCat.includes('мяс')) {
+          cat = 'meat';
+          defaultCatName = { ka: 'ხორცის რაციონები', ru: 'Мясные рационы', en: 'Meat Meals' };
+        } else if (rawCat.includes('breakfast') || rawCat.includes('morning') || rawCat.includes('საუზმ') || rawCat.includes('завтрак')) {
+          cat = 'breakfast';
+          defaultCatName = { ka: 'საუზმე', ru: 'Завтраки', en: 'Breakfast' };
+        } else if (rawCat.includes('drink') || rawCat.includes('detox') || rawCat.includes('სასმელ') || rawCat.includes('напит')) {
+          cat = 'drinks';
+          defaultCatName = { ka: 'სასმელები / დეტოქსი', ru: 'Напитки и Детокс', en: 'Drinks & Detox' };
+        } else if (rawCat.includes('dessert') || rawCat.includes('snack') || rawCat.includes('დესერტ') || rawCat.includes('десерт')) {
+          cat = 'dessert';
+          defaultCatName = { ka: 'FIT დესერტები', ru: 'Десерты FIT', en: 'Fit Desserts' };
+        }
+
+        // Parse categoryName object if available
+        let categoryNameObj = defaultCatName;
+        if (prod.category_name && typeof prod.category_name === 'object') {
+          categoryNameObj = {
+            ka: prod.category_name.ka || defaultCatName.ka,
+            ru: prod.category_name.ru || defaultCatName.ru,
+            en: prod.category_name.en || defaultCatName.en,
+          };
+        }
+
+        // Parse badge
+        let badgeObj = undefined;
+        if (prod.badge && typeof prod.badge === 'object') {
+          badgeObj = {
+            ka: prod.badge.ka || prod.badge.ru || '',
+            ru: prod.badge.ru || prod.badge.ka || '',
+            en: prod.badge.en || prod.badge.ru || '',
+          };
+        } else if (typeof prod.badge === 'string' && prod.badge.trim()) {
+          badgeObj = { ka: prod.badge, ru: prod.badge, en: prod.badge };
+        }
+
         return {
-          id: dish.id,
-          name: dish.name,
-          category: dish.category,
-          categoryName: { ka: dish.category, ru: dish.category, en: dish.category },
-          price: dish.retailPrice,
-          costPrice: dish.costPrice,
-          calories: dish.macros.calories,
-          weightGrams: dish.macros.weightGrams,
-          image: dish.image || '/images/meals/chicken-ptitim.webp',
-          badge: { ka: dish.day || 'FitFood', ru: dish.day || 'FitFood', en: dish.day || 'FitFood' },
+          id: String(prod.id || dish.id),
+          name: dish.name || prod.name,
+          category: cat,
+          categoryName: categoryNameObj,
+          price: Number(prod.price) || dish.retailPrice || 16,
+          costPrice: Number(prod.cost_price) || dish.costPrice || 9.5,
+          calories: Number(prod.calories) || dish.macros?.calories || 420,
+          weightGrams: Number(prod.weight_grams) || dish.macros?.weightGrams || 320,
+          image: (prod as any).image || dish.image || '/images/meals/chicken-ptitim.webp',
+          badge: badgeObj,
         };
       });
     } catch (e) {

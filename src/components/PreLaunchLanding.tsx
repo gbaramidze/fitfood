@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
-import { partnerProducts as fallbackPartnerProducts } from '@/data/partnerData';
 import { Locale } from '@/types';
+import { LazyProductImage } from '@/components/partner/LazyProductImage';
 import './pre-launch.css';
 
 const LANGUAGES: { code: Locale; label: string; full: string }[] = [
@@ -37,7 +37,7 @@ interface PartnerProductItem {
   calories: number;
   weight_grams?: number;
   weightGrams?: number;
-  image: string;
+  image?: string;
   badge?: {
     ru?: string;
     ka?: string;
@@ -478,7 +478,7 @@ const PROGRAMS_DATA = [
 
 export const PreLaunchLanding: React.FC = () => {
   const [lang, setLang] = useState<Locale>('ru');
-  const [dbProducts, setDbProducts] = useState<PartnerProductItem[]>(fallbackPartnerProducts);
+  const [dbProducts, setDbProducts] = useState<PartnerProductItem[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -509,12 +509,12 @@ export const PreLaunchLanding: React.FC = () => {
       try {
         const { data, error } = await supabase
           .from('partner_products')
-          .select('id, name, category, category_name, price, cost_price, calories, weight_grams, image, badge, created_at, slug, description, meal_type, day, protein, fat, carbs, ingredients, allergens, cooking_method, target_channels')
+          .select('id, name, category, category_name, price, cost_price, calories, weight_grams, badge, created_at, slug, description, meal_type, day, protein, fat, carbs, ingredients, allergens, cooking_method, target_channels')
           .neq('category', 'drinks')
           .order('created_at', { ascending: true });
 
-        if (!error && data && data.length > 0) {
-          setDbProducts(data as PartnerProductItem[]);
+        if (!error && data) {
+          setDbProducts(data as unknown as PartnerProductItem[]);
         }
       } catch (err) {
         console.error('Error fetching partner_products:', err);
@@ -925,12 +925,13 @@ export const PreLaunchLanding: React.FC = () => {
                 return (
                   <div key={prod.id} className="pl-dish-card">
                     <div className="pl-dish-img-wrap">
-                      <Image
-                        src={prod.image || '/images/meals/beef-demiglace-puree.webp'}
+                      <LazyProductImage
+                        productId={prod.id}
                         alt={prodName}
                         width={380}
                         height={180}
                         className="pl-dish-img"
+                        fill={false}
                       />
                       {badgeText && (
                         <div className="pl-dish-badge-pill">

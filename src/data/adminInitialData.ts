@@ -10,7 +10,6 @@ import {
 } from '@/types/admin';
 import { dishes } from './dishes';
 import { programs } from './programs';
-import { partnerProducts } from './partnerData';
 
 // NO MOCK DISHES (Empty by default, loaded from Supabase or added by admin)
 export const initialAdminDishes: AdminDish[] = [];

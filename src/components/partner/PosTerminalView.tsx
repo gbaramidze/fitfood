@@ -5,9 +5,10 @@ import Image from 'next/image';
 import { usePartner } from '@/context/PartnerContext';
 import { PartnerProduct, PartnerSale } from '@/types/partner';
 import { IconClose, IconCheck, IconTrash } from '@/components/Icons';
+import { LazyProductImage } from '@/components/partner/LazyProductImage';
 
 export const PosTerminalView: React.FC = () => {
-  const { currentPoint, products, getPointStock, completeSale } = usePartner();
+  const { currentPoint, products, getPointStock, completeSale, quickRestockPoint } = usePartner();
   
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -22,6 +23,7 @@ export const PosTerminalView: React.FC = () => {
 
   // Toast Notification
   const [toastSale, setToastSale] = useState<PartnerSale | null>(null);
+  const [restockMsg, setRestockMsg] = useState<string | null>(null);
 
   // Auto-dismiss toast notification
   React.useEffect(() => {
@@ -52,19 +54,40 @@ export const PosTerminalView: React.FC = () => {
   ];
 
   const filteredProducts = products.filter(p => {
-    if (selectedCategory !== 'all' && p.category !== selectedCategory) {
-      return false;
+    if (selectedCategory !== 'all') {
+      const cat = (p.category || '').toLowerCase();
+      if (selectedCategory === 'fish' && !(cat.includes('fish') || cat.includes('seafood') || cat.includes('თევზ') || cat.includes('рыб'))) {
+        return false;
+      }
+      if (selectedCategory === 'poultry' && !(cat.includes('poultry') || cat.includes('chicken') || cat.includes('ქათამ') || cat.includes('птиц'))) {
+        return false;
+      }
+      if (selectedCategory === 'meat' && !(cat.includes('meat') || cat.includes('beef') || cat.includes('pork') || cat.includes('ხორც') || cat.includes('мяс'))) {
+        return false;
+      }
+      if (selectedCategory === 'breakfast' && !(cat.includes('breakfast') || cat.includes('morning') || cat.includes('საუზმ') || cat.includes('завтрак'))) {
+        return false;
+      }
+      if (selectedCategory === 'drinks' && !(cat.includes('drink') || cat.includes('detox') || cat.includes('სასმელ') || cat.includes('напит'))) {
+        return false;
+      }
+      if (selectedCategory === 'dessert' && !(cat.includes('dessert') || cat.includes('snack') || cat.includes('დესერტ') || cat.includes('десерт'))) {
+        return false;
+      }
     }
     if (!searchQuery.trim()) {
       return true;
     }
     const q = searchQuery.toLowerCase().trim();
-    const nameKa = (p.name.ka || '').toLowerCase();
-    const nameRu = (p.name.ru || '').toLowerCase();
-    const nameEn = (p.name.en || '').toLowerCase();
+    const nameKa = (p.name?.ka || '').toLowerCase();
+    const nameRu = (p.name?.ru || '').toLowerCase();
+    const nameEn = (p.name?.en || '').toLowerCase();
     const catKa = (p.categoryName?.ka || '').toLowerCase();
+    const catRu = (p.categoryName?.ru || '').toLowerCase();
+    const catEn = (p.categoryName?.en || '').toLowerCase();
     const caloriesStr = p.calories ? `${p.calories}` : '';
-    return nameKa.includes(q) || nameRu.includes(q) || nameEn.includes(q) || catKa.includes(q) || caloriesStr.includes(q);
+    const priceStr = p.price ? `${p.price}` : '';
+    return nameKa.includes(q) || nameRu.includes(q) || nameEn.includes(q) || catKa.includes(q) || catRu.includes(q) || catEn.includes(q) || caloriesStr.includes(q) || priceStr.includes(q);
   });
 
   const addToCart = (product: PartnerProduct) => {
@@ -292,13 +315,11 @@ export const PosTerminalView: React.FC = () => {
                   onClick={() => !isOutOfStock && addToCart(product)}
                 >
                   <div className="pos-min-card-img-box">
-                    <Image
-                      src={product.image || '/images/meals/chicken-ptitim.webp'}
+                    <LazyProductImage
+                      productId={product.id}
                       alt={product.name?.ka || product.name?.ru || 'კერძი'}
-                      fill
                       className="pos-min-card-img"
                       sizes="200px"
-                      unoptimized={product.image?.startsWith('data:') || product.image?.startsWith('http')}
                     />
                     {inCart > 0 && (
                       <div className="pos-min-cart-count">{inCart}</div>

@@ -62,9 +62,9 @@ interface AdminContextType {
   netProfit: number;
 
   // Dishes Actions
-  addDish: (dish: Omit<AdminDish, 'id' | 'createdAt'>) => AdminDish;
-  updateDish: (id: string, updates: Partial<AdminDish>) => boolean;
-  deleteDish: (id: string) => boolean;
+  addDish: (dish: Omit<AdminDish, 'id' | 'createdAt'>) => Promise<AdminDish>;
+  updateDish: (id: string, updates: Partial<AdminDish>) => Promise<boolean>;
+  deleteDish: (id: string) => Promise<boolean>;
 
   // Programs Actions
   addProgram: (program: Omit<AdminProgram, 'id'>) => AdminProgram;
@@ -84,8 +84,8 @@ interface AdminContextType {
   deleteIncomingOrder: (id: string) => boolean;
 
   // POS Logistics & Stock Actions
-  createTransfer: (pointId: string, items: { productId: string; quantity: number }[], note?: string) => AdminPointTransfer;
-  updatePointStock: (pointId: string, productId: string, qty: number) => void;
+  createTransfer: (pointId: string, items: { productId: string; quantity: number }[], note?: string) => Promise<AdminPointTransfer>;
+  updatePointStock: (pointId: string, productId: string, qty: number) => Promise<void>;
   updateProductPrices: (productId: string, retailPrice: number, costPrice?: number) => void;
 
   // Expenses & Salaries
@@ -175,7 +175,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
     try {
       const { data: dbProducts, error: prodErr } = await supabase
         .from('partner_products')
-        .select('*');
+        .select('id, name, category, category_name, price, cost_price, calories, weight_grams, image, badge, created_at, slug, description, meal_type, day, protein, fat, carbs, ingredients, allergens, cooking_method, target_channels, updated_at');
 
       if (!prodErr && dbProducts && dbProducts.length > 0) {
         const mapped = dbProducts.map(mapSupabaseProductToAdminDish);
@@ -263,6 +263,39 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
       } catch (e) {
         console.warn('Supabase stocks fetch error:', e);
       }
+
+      // 7. Fetch Shipments / Transfers
+      try {
+        const { data: dbShipments, error: shipErr } = await supabase
+          .from('partner_shipments')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!shipErr && dbShipments && dbShipments.length > 0) {
+          const mappedTransfers: AdminPointTransfer[] = dbShipments.map((s: any) => {
+            const pt = points.find(p => p.id === s.point_id);
+            const items = Array.isArray(s.items) ? s.items : [];
+            const totalCost = items.reduce((sum: number, it: any) => sum + ((it.costPrice || 0) * (it.quantity || 0)), 0);
+            const totalRetail = items.reduce((sum: number, it: any) => sum + ((it.retailPrice || 0) * (it.quantity || 0)), 0);
+            return {
+              id: s.id,
+              transferNumber: s.shipment_number || s.id,
+              pointId: s.point_id,
+              pointName: pt ? (typeof pt.name === 'object' ? pt.name.ka : pt.name) : s.point_id,
+              items: items,
+              totalUnits: s.total_units || items.reduce((sum: number, it: any) => sum + (it.quantity || 0), 0),
+              totalCost,
+              totalRetail,
+              status: s.status === 'delivered' || s.status === 'received' ? 'received' : 'in_transit',
+              dispatchedAt: s.created_at,
+              driverName: 'კურიერი',
+              note: s.note || '',
+            };
+          });
+          setTransfers(mappedTransfers);
+        }
+      } catch (e) {
+        console.warn('Supabase shipments fetch error:', e);
+      }
     };
 
     fetchSupabaseData();
@@ -303,7 +336,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
   const netProfit = totalRevenue - totalExpenses - totalPayroll;
 
   // Dishes Actions (Direct Supabase Upsert + Delete)
-  const addDish = (dishData: Omit<AdminDish, 'id' | 'createdAt'>): AdminDish => {
+  const addDish = async (dishData: Omit<AdminDish, 'id' | 'createdAt'>): Promise<AdminDish> => {
     const newDish: AdminDish = {
       ...dishData,
       id: `dish-${Date.now().toString(36)}`,
@@ -311,6 +344,11 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
     };
     
     setDishes(prev => [newDish, ...prev]);
+
+    if (newDish.image) {
+      const { productImageService } = await import('@/services/productImageService');
+      productImageService.setCachedImage(newDish.id, newDish.image);
+    }
 
     if (isSupabaseConfigured) {
       const fullRow = {
@@ -338,7 +376,8 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
         updated_at: new Date().toISOString(),
       };
 
-      supabase.from('partner_products').upsert(fullRow).then(({ error }) => {
+      try {
+        const { error } = await supabase.from('partner_products').upsert(fullRow);
         if (error) {
           console.warn('Full Supabase product insert returned notice, trying basic row:', error.message);
           const basicRow = {
@@ -353,76 +392,98 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
             image: newDish.image,
             badge: { ka: newDish.day, ru: newDish.day, en: newDish.day },
           };
-          supabase.from('partner_products').upsert(basicRow);
+          await supabase.from('partner_products').upsert(basicRow);
         }
-      });
+      } catch (err) {
+        console.error('Failed to add dish to Supabase:', err);
+      }
     }
 
     return newDish;
   };
 
-  const updateDish = (id: string, updates: Partial<AdminDish>): boolean => {
+  const updateDish = async (id: string, updates: Partial<AdminDish>): Promise<boolean> => {
+    let mergedDish: AdminDish | null = null;
     setDishes(prev => {
       const updated = prev.map(d => {
         if (d.id === id) {
-          const merged = { ...d, ...updates };
-          if (isSupabaseConfigured) {
-            const fullRow = {
-              id: merged.id,
-              slug: merged.slug,
-              name: merged.name,
-              description: merged.description,
-              category: merged.category,
-              category_name: { ka: merged.category, ru: merged.category, en: merged.category },
-              meal_type: merged.mealType,
-              day: merged.day,
-              price: merged.retailPrice,
-              cost_price: merged.costPrice,
-              calories: merged.macros.calories,
-              protein: merged.macros.protein,
-              fat: merged.macros.fat,
-              carbs: merged.macros.carbs,
-              weight_grams: merged.macros.weightGrams,
-              image: merged.image,
-              ingredients: merged.ingredients,
-              allergens: merged.allergens,
-              cooking_method: merged.cookingMethod,
-              target_channels: merged.targetChannels,
-              updated_at: new Date().toISOString(),
-            };
-            supabase.from('partner_products').upsert(fullRow).then(({ error }) => {
-              if (error) {
-                const basicRow = {
-                  id: merged.id,
-                  name: merged.name,
-                  category: merged.category,
-                  category_name: { ka: merged.category, ru: merged.category, en: merged.category },
-                  price: merged.retailPrice,
-                  cost_price: merged.costPrice,
-                  calories: merged.macros.calories,
-                  weight_grams: merged.macros.weightGrams,
-                  image: merged.image,
-                  badge: { ka: merged.day, ru: merged.day, en: merged.day },
-                };
-                supabase.from('partner_products').upsert(basicRow);
-              }
-            });
-          }
-          return merged;
+          mergedDish = { ...d, ...updates };
+          return mergedDish;
         }
         return d;
       });
       return updated;
     });
+
+    if (updates.image) {
+      const { productImageService } = await import('@/services/productImageService');
+      productImageService.setCachedImage(id, updates.image);
+    }
+
+    if (isSupabaseConfigured && mergedDish) {
+      const d: AdminDish = mergedDish;
+      const fullRow = {
+        id: d.id,
+        slug: d.slug,
+        name: d.name,
+        description: d.description,
+        category: d.category,
+        category_name: { ka: d.category, ru: d.category, en: d.category },
+        meal_type: d.mealType,
+        day: d.day,
+        price: d.retailPrice,
+        cost_price: d.costPrice,
+        calories: d.macros.calories,
+        protein: d.macros.protein,
+        fat: d.macros.fat,
+        carbs: d.macros.carbs,
+        weight_grams: d.macros.weightGrams,
+        image: d.image,
+        ingredients: d.ingredients,
+        allergens: d.allergens,
+        cooking_method: d.cookingMethod,
+        target_channels: d.targetChannels,
+        updated_at: new Date().toISOString(),
+      };
+
+      try {
+        const { error } = await supabase.from('partner_products').upsert(fullRow);
+        if (error) {
+          const basicRow = {
+            id: d.id,
+            name: d.name,
+            category: d.category,
+            category_name: { ka: d.category, ru: d.category, en: d.category },
+            price: d.retailPrice,
+            cost_price: d.costPrice,
+            calories: d.macros.calories,
+            weight_grams: d.macros.weightGrams,
+            image: d.image,
+            badge: { ka: d.day, ru: d.day, en: d.day },
+          };
+          await supabase.from('partner_products').upsert(basicRow);
+        }
+      } catch (err) {
+        console.error('Failed to update dish in Supabase:', err);
+      }
+    }
     return true;
   };
 
-  const deleteDish = (id: string): boolean => {
+  const deleteDish = async (id: string): Promise<boolean> => {
     setDishes(prev => prev.filter(d => d.id !== id));
+    try {
+      const { productImageService } = await import('@/services/productImageService');
+      productImageService.invalidateImage(id);
+    } catch {}
+
     if (isSupabaseConfigured) {
-      supabase.from('partner_products').delete().eq('id', id).then(({ error }) => {
+      try {
+        const { error } = await supabase.from('partner_products').delete().eq('id', id);
         if (error) console.error('Supabase product delete error:', error);
-      });
+      } catch (err) {
+        console.error('Failed to delete dish from Supabase:', err);
+      }
     }
     return true;
   };
@@ -531,7 +592,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
   };
 
   // Logistics & Transfers
-  const createTransfer = (pointId: string, items: { productId: string; quantity: number }[], note?: string): AdminPointTransfer => {
+  const createTransfer = async (pointId: string, items: { productId: string; quantity: number }[], note?: string): Promise<AdminPointTransfer> => {
     const targetPoint = points.find(p => p.id === pointId);
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const transferNumber = `TR-${dateStr}-${Math.floor(100 + Math.random() * 900)}`;
@@ -540,7 +601,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
       const dish = dishes.find(d => d.id === it.productId);
       return {
         productId: it.productId,
-        productName: dish ? dish.name.ka : it.productId,
+        productName: dish ? (typeof dish.name === 'object' ? dish.name.ka : dish.name) : it.productId,
         quantity: it.quantity,
         costPrice: dish ? dish.costPrice : 0,
         retailPrice: dish ? dish.retailPrice : 15,
@@ -555,7 +616,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
       id: `tr-${Date.now().toString(36)}`,
       transferNumber,
       pointId,
-      pointName: targetPoint ? targetPoint.name.ka : 'წერტილი',
+      pointName: targetPoint ? (typeof targetPoint.name === 'object' ? targetPoint.name.ka : targetPoint.name) : 'წერტილი',
       items: detailedItems,
       totalUnits,
       totalCost,
@@ -568,32 +629,48 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
 
     setTransfers(prev => [newTr, ...prev]);
 
-    setStocks(prev => {
-      const pointStock = { ...(prev[pointId] || {}) };
-      items.forEach(it => {
-        pointStock[it.productId] = (pointStock[it.productId] || 0) + it.quantity;
-      });
-      return { ...prev, [pointId]: pointStock };
+    const nextPointStocks: Record<string, number> = { ...(stocks[pointId] || {}) };
+    items.forEach(it => {
+      nextPointStocks[it.productId] = (nextPointStocks[it.productId] || 0) + it.quantity;
     });
 
-    // Save shipment in Supabase
+    setStocks(prev => ({
+      ...prev,
+      [pointId]: nextPointStocks,
+    }));
+
+    // Save shipment and update point stocks in Supabase
     if (isSupabaseConfigured) {
-      supabase.from('partner_shipments').upsert({
-        id: newTr.id,
-        shipment_number: newTr.transferNumber,
-        point_id: newTr.pointId,
-        items: newTr.items,
-        total_units: newTr.totalUnits,
-        status: 'pending',
-        note: newTr.note,
-        created_at: newTr.dispatchedAt,
-      });
+      try {
+        await supabase.from('partner_shipments').upsert({
+          id: newTr.id,
+          shipment_number: newTr.transferNumber,
+          point_id: newTr.pointId,
+          items: newTr.items,
+          total_units: newTr.totalUnits,
+          status: 'pending',
+          note: newTr.note,
+          created_at: newTr.dispatchedAt,
+        });
+
+        for (const it of items) {
+          const qty = nextPointStocks[it.productId] || it.quantity;
+          await supabase.from('partner_stocks').upsert({
+            point_id: pointId,
+            product_id: it.productId,
+            quantity: qty,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.error('Supabase transfer save error:', err);
+      }
     }
 
     return newTr;
   };
 
-  const updatePointStock = (pointId: string, productId: string, qty: number) => {
+  const updatePointStock = async (pointId: string, productId: string, qty: number): Promise<void> => {
     const finalQty = Math.max(0, qty);
     setStocks(prev => ({
       ...prev,
@@ -604,12 +681,16 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
     }));
 
     if (isSupabaseConfigured) {
-      supabase.from('partner_stocks').upsert({
-        point_id: pointId,
-        product_id: productId,
-        quantity: finalQty,
-        updated_at: new Date().toISOString(),
-      });
+      try {
+        await supabase.from('partner_stocks').upsert({
+          point_id: pointId,
+          product_id: productId,
+          quantity: finalQty,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('Supabase stock update error:', err);
+      }
     }
   };
 

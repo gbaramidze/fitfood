@@ -96,7 +96,7 @@ export const ZReportView: React.FC = () => {
         const pObj = products.find(p => p.id === item.productId);
         productSummaryMap[item.productId] = {
           product: pObj,
-          name: pObj?.name.ka || item.productName,
+          name: pObj?.name?.ka || pObj?.name?.ru || pObj?.name?.en || item.productName || 'რაციონი',
           quantity: 0,
           totalSum: 0,
         };
