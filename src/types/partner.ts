@@ -64,8 +64,8 @@ export interface PartnerSale {
   receiptNumber: string;
   items: PartnerSaleItem[];
   originalAmount: number; // before discount
-  discountAmount: number; // e.g. 4 GEL or full price
-  discountType: 'none' | 'fixed4' | 'free';
+  discountAmount: number; // e.g. 50% or full price
+  discountType: 'none' | 'percent50' | 'free' | 'fixed4';
   discountComment?: string;
   totalAmount: number;
   paymentMethod: 'card' | 'cash' | 'split' | 'free';

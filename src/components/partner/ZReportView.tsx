@@ -22,7 +22,7 @@ export const ZReportView: React.FC = () => {
   const [editPaymentMethod, setEditPaymentMethod] = useState<'card' | 'cash' | 'split' | 'free'>('card');
   const [editSplitCash, setEditSplitCash] = useState<string>('10');
   const [editItems, setEditItems] = useState<PartnerSaleItem[]>([]);
-  const [editDiscountType, setEditDiscountType] = useState<'none' | 'fixed4' | 'free'>('none');
+  const [editDiscountType, setEditDiscountType] = useState<'none' | 'percent50' | 'free' | 'fixed4'>('none');
   const [editDiscountComment, setEditDiscountComment] = useState<string>('');
   const [editNotes, setEditNotes] = useState<string>('');
   const [selectedProductToAdd, setSelectedProductToAdd] = useState<string>('');
@@ -70,13 +70,13 @@ export const ZReportView: React.FC = () => {
     .reduce((sum, s) => sum + s.items.reduce((iSum, it) => iSum + it.quantity, 0), 0);
 
   const totalDiscountsGiven = activeSales
-    .filter(s => s.discountType === 'fixed4')
+    .filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4')
     .reduce((sum, s) => sum + s.discountAmount, 0);
 
   const filteredDaySales = daySales.filter(sale => {
     const isFree = sale.paymentMethod === 'free' || sale.discountType === 'free' || sale.totalAmount === 0;
     if (filterPaymentType === 'free') return isFree;
-    if (filterPaymentType === 'discount') return sale.discountType === 'fixed4';
+    if (filterPaymentType === 'discount') return sale.discountType === 'percent50' || sale.discountType === 'fixed4';
     if (isFree) return false;
     if (filterPaymentType === 'card' && sale.paymentMethod !== 'card') return false;
     if (filterPaymentType === 'cash' && sale.paymentMethod !== 'cash') return false;
@@ -181,7 +181,9 @@ export const ZReportView: React.FC = () => {
   const editSubtotal = editItems.reduce((sum, it) => sum + it.pricePerUnit * it.quantity, 0);
   const editTotalQty = editItems.reduce((sum, it) => sum + it.quantity, 0);
   let editDiscountAmt = 0;
-  if (editDiscountType === 'fixed4') {
+  if (editDiscountType === 'percent50') {
+    editDiscountAmt = Math.round((editSubtotal * 0.5) * 100) / 100;
+  } else if (editDiscountType === 'fixed4') {
     editDiscountAmt = Math.min(editSubtotal, 4 * editTotalQty);
   } else if (editDiscountType === 'free' || editPaymentMethod === 'free') {
     editDiscountAmt = editSubtotal;
@@ -540,7 +542,7 @@ export const ZReportView: React.FC = () => {
               className={`disc-pill ${filterPaymentType === 'discount' ? 'active' : ''}`}
               style={{ fontSize: '11.5px', padding: '4px 10px' }}
             >
-              🏷️ ფასდაკლებით ({daySales.filter(s => s.discountType === 'fixed4').length})
+              🏷️ ფასდაკლებით ({daySales.filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4').length})
             </button>
           </div>
         </div>
@@ -603,7 +605,9 @@ export const ZReportView: React.FC = () => {
                           <div style={{ fontSize: '11px', color: isSaleFree ? '#C084FC' : '#10B981', marginTop: '3px' }}>
                             {isSaleFree
                               ? '🎁 უფასო'
-                              : `🏷️ ფასდაკლება -4 ₾/ცალზე (-${sale.discountAmount} ₾)`}: {sale.discountComment}
+                              : sale.discountType === 'percent50'
+                              ? `🏷️ ფასდაკლება -50% (-${sale.discountAmount.toFixed(2)} ₾)`
+                              : `🏷️ ფასდაკლება (-${sale.discountAmount.toFixed(2)} ₾)`}: {sale.discountComment}
                           </div>
                         )}
                         {sale.notes && (
@@ -819,12 +823,12 @@ export const ZReportView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setEditDiscountType('fixed4');
+                    setEditDiscountType('percent50');
                     if (editPaymentMethod === 'free') setEditPaymentMethod('card');
                   }}
-                  className={`disc-pill ${editDiscountType === 'fixed4' ? 'active' : ''}`}
+                  className={`disc-pill ${editDiscountType === 'percent50' ? 'active' : ''}`}
                 >
-                  -4 ₾ / პოზიცია (-{4 * editTotalQty} ₾)
+                  -50% ფასდაკლება (-{(editSubtotal * 0.5).toFixed(2)} ₾)
                 </button>
                 <button
                   type="button"

@@ -29,7 +29,7 @@ export const ReceiptsHistoryView: React.FC = () => {
   const filteredSales = pointTodaySales.filter(sale => {
     const isFree = sale.paymentMethod === 'free' || sale.discountType === 'free' || sale.totalAmount === 0;
     if (filterType === 'free') return isFree;
-    if (filterType === 'discount') return sale.discountType === 'fixed4';
+    if (filterType === 'discount') return sale.discountType === 'percent50' || sale.discountType === 'fixed4';
     if (isFree) return false;
     if (filterType === 'card' && sale.paymentMethod !== 'card') return false;
     if (filterType === 'cash' && sale.paymentMethod !== 'cash') return false;
@@ -66,7 +66,7 @@ export const ReceiptsHistoryView: React.FC = () => {
     .reduce((sum, s) => sum + s.items.reduce((iSum, it) => iSum + it.quantity, 0), 0);
 
   const totalDiscountsGiven = activeSales
-    .filter(s => s.discountType === 'fixed4')
+    .filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4')
     .reduce((sum, s) => sum + s.discountAmount, 0);
 
   const handlePerformRefund = (sale: PartnerSale) => {
@@ -297,7 +297,7 @@ export const ReceiptsHistoryView: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          🏷️ ფასდაკლებით ({pointTodaySales.filter(s => s.discountType === 'fixed4').length})
+          🏷️ ფასდაკლებით ({pointTodaySales.filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4').length})
         </button>
       </div>
 
@@ -351,7 +351,11 @@ export const ReceiptsHistoryView: React.FC = () => {
                         </div>
                         {sale.discountType !== 'none' && (
                           <div style={{ fontSize: '11.5px', marginTop: '4px', fontWeight: 600, color: sale.discountType === 'free' ? '#A855F7' : '#EC4899' }}>
-                            {sale.discountType === 'free' ? '🎁 უფასო რაციონი' : `🏷️ ფასდაკლება (-${sale.discountAmount} ₾)`}
+                            {sale.discountType === 'free'
+                              ? '🎁 უფასო რაციონი'
+                              : sale.discountType === 'percent50'
+                              ? `🏷️ ფასდაკლება -50% (-${sale.discountAmount.toFixed(2)} ₾)`
+                              : `🏷️ ფასდაკლება (-${sale.discountAmount.toFixed(2)} ₾)`}
                             {sale.discountComment ? ` • ${sale.discountComment}` : ''}
                           </div>
                         )}
@@ -395,7 +399,7 @@ export const ReceiptsHistoryView: React.FC = () => {
                           color: isRefunded ? '#EF4444' : sale.discountType === 'free' ? '#A855F7' : '#FFFFFF',
                           textDecoration: isRefunded ? 'line-through' : 'none'
                         }}>
-                          {sale.totalAmount} ₾
+                          {sale.totalAmount.toFixed(2)} ₾
                         </strong>
                       </td>
                       <td style={{ textAlign: 'right' }}>

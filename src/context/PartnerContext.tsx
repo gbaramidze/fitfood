@@ -24,7 +24,7 @@ interface CompleteSaleParams {
   items: { product: PartnerProduct; quantity: number }[];
   paymentMethod: 'card' | 'cash' | 'split' | 'free';
   splitDetails?: { cashAmount: number; cardAmount: number };
-  discountType?: 'none' | 'fixed4' | 'free';
+  discountType?: 'none' | 'percent50' | 'free' | 'fixed4';
   discountComment?: string;
   notes?: string;
 }
@@ -34,7 +34,7 @@ export interface EditSaleParams {
   paymentMethod?: 'card' | 'cash' | 'split' | 'free';
   splitDetails?: { cashAmount: number; cardAmount: number };
   items?: { productId: string; productName: string; quantity: number; pricePerUnit: number; totalPrice: number }[];
-  discountType?: 'none' | 'fixed4' | 'free';
+  discountType?: 'none' | 'percent50' | 'free' | 'fixed4';
   discountComment?: string;
   notes?: string;
 }
@@ -266,8 +266,11 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const totalUnitsCount = saleItems.reduce((sum, item) => sum + item.quantity, 0);
 
     let discountAmount = 0;
-    if (discountType === 'fixed4') {
-      // 4 GEL discount on EACH item in the receipt
+    if (discountType === 'percent50') {
+      // 50% discount on total original amount
+      discountAmount = Math.round((originalAmount * 0.5) * 100) / 100;
+    } else if (discountType === 'fixed4') {
+      // Legacy 4 GEL discount on EACH item in the receipt
       discountAmount = Math.min(originalAmount, 4 * totalUnitsCount);
     } else if (discountType === 'free') {
       discountAmount = originalAmount;
@@ -401,7 +404,9 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const totalUnitsCount = finalItems.reduce((sum, it) => sum + it.quantity, 0);
 
           let discountAmount = 0;
-          if (finalDiscountType === 'fixed4') {
+          if (finalDiscountType === 'percent50') {
+            discountAmount = Math.round((originalAmount * 0.5) * 100) / 100;
+          } else if (finalDiscountType === 'fixed4') {
             discountAmount = Math.min(originalAmount, 4 * totalUnitsCount);
           } else if (finalDiscountType === 'free') {
             discountAmount = originalAmount;

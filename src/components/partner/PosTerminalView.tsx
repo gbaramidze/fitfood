@@ -18,7 +18,7 @@ export const PosTerminalView: React.FC = () => {
   const [cashGiven, setCashGiven] = useState<string>('');
   
   // Discounts
-  const [discountType, setDiscountType] = useState<'none' | 'fixed4'>('none');
+  const [discountType, setDiscountType] = useState<'none' | 'percent50'>('none');
   const [discountComment, setDiscountComment] = useState<string>('');
 
   // Toast Notification
@@ -149,10 +149,10 @@ export const PosTerminalView: React.FC = () => {
   const isFreePayment = paymentMethod === 'free';
   const effectiveDiscountType = isFreePayment ? 'free' : discountType;
 
-  // Discount calculation (-4 GEL on EACH position / item)
+  // Discount calculation (-50% on subtotal or 100% if free)
   let discountDeduction = 0;
-  if (effectiveDiscountType === 'fixed4') {
-    discountDeduction = Math.min(rawSubtotal, 4 * totalQuantity);
+  if (effectiveDiscountType === 'percent50') {
+    discountDeduction = Math.round((rawSubtotal * 0.5) * 100) / 100;
   } else if (effectiveDiscountType === 'free') {
     discountDeduction = rawSubtotal;
   }
@@ -177,8 +177,8 @@ export const PosTerminalView: React.FC = () => {
       return;
     }
 
-    if (!isFree && discountType === 'fixed4' && !discountComment.trim()) {
-      alert('გთხოვთ მიუთითოთ ვისთვის არის 4 ₾ ფასდაკლება (მაგალითად: მწვრთნელი, მუდმივი კლიენტი)');
+    if (!isFree && discountType === 'percent50' && !discountComment.trim()) {
+      alert('გთხოვთ მიუთითოთ ვისთვის არის -50% ფასდაკლება (მაგალითად: მწვრთნელი, თანამშრომელი, აქცია)');
       return;
     }
 
@@ -443,27 +443,25 @@ export const PosTerminalView: React.FC = () => {
               </div>
             )}
 
-            {/* If Paid Payment: Optional -4 GEL Discount */}
+            {/* If Paid Payment: Optional -50% Discount */}
             {paymentMethod !== 'free' && (
               <div className="pos-discounts-box">
                 <div className="discount-pills">
                   <button
                     type="button"
-                    onClick={() => setDiscountType(prev => prev === 'fixed4' ? 'none' : 'fixed4')}
-                    className={`disc-pill ${discountType === 'fixed4' ? 'active' : ''}`}
+                    onClick={() => setDiscountType(prev => prev === 'percent50' ? 'none' : 'percent50')}
+                    className={`disc-pill ${discountType === 'percent50' ? 'active' : ''}`}
                   >
-                    🏷️ {totalQuantity > 1
-                      ? `-4 ₾ / პოზ. (-${4 * totalQuantity} ₾)`
-                      : '-4 ₾ / პოზიცია'}
+                    🏷️ -50% ფასდაკლება (-{(rawSubtotal * 0.5).toFixed(2)} ₾)
                   </button>
                 </div>
 
-                {discountType === 'fixed4' && (
+                {discountType === 'percent50' && (
                   <div className="discount-comment-wrap">
                     <input
                       type="text"
                       required
-                      placeholder={`ვისთვის არის ფასდაკლება (-${4 * totalQuantity} ₾)...`}
+                      placeholder={`ვისთვის არის -50% ფასდაკლება (-${(rawSubtotal * 0.5).toFixed(2)} ₾)...`}
                       value={discountComment}
                       onChange={e => setDiscountComment(e.target.value)}
                       className="discount-comment-input"
@@ -516,8 +514,8 @@ export const PosTerminalView: React.FC = () => {
                 <span>{totalQuantity} პოზ.</span>
                 {paymentMethod === 'free' ? (
                   <span className="disc-applied-tag" style={{ color: '#A855F7' }}>(🎁 უფასო)</span>
-                ) : discountType === 'fixed4' ? (
-                  <span className="disc-applied-tag">(-{4 * totalQuantity} ₾)</span>
+                ) : discountType === 'percent50' ? (
+                  <span className="disc-applied-tag">(-50%: -{(rawSubtotal * 0.5).toFixed(2)} ₾)</span>
                 ) : null}
               </div>
               <div className="total-val">
@@ -525,14 +523,14 @@ export const PosTerminalView: React.FC = () => {
                   <span style={{ color: '#A855F7' }}>0.00 <small>₾</small></span>
                 ) : (
                   <>
-                    {finalTotal} <small>₾</small>
+                    {finalTotal.toFixed(2)} <small>₾</small>
                   </>
                 )}
               </div>
             </div>
 
             <button onClick={handleCheckout} className="pos-min-charge-btn">
-              {paymentMethod === 'free' ? 'გაყიდვის გაფორმება (🎁 უფასო)' : `გაყიდვის გაფორმება (${finalTotal} ₾)`}
+              {paymentMethod === 'free' ? 'გაყიდვის გაფორმება (🎁 უფასო)' : `გაყიდვის გაფორმება (${finalTotal.toFixed(2)} ₾)`}
             </button>
           </div>
         )}
