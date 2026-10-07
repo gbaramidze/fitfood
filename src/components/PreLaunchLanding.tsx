@@ -514,7 +514,26 @@ export const PreLaunchLanding: React.FC = () => {
           .order('created_at', { ascending: true });
 
         if (!error && data) {
-          setDbProducts(data as unknown as PartnerProductItem[]);
+          const list = [...(data as unknown as PartnerProductItem[])];
+          if (typeof window !== 'undefined') {
+            try {
+              const savedOrderStr = localStorage.getItem('fitfood_admin_dishes_order');
+              if (savedOrderStr) {
+                const savedIds: string[] = JSON.parse(savedOrderStr);
+                if (Array.isArray(savedIds) && savedIds.length > 0) {
+                  list.sort((a, b) => {
+                    const idxA = savedIds.indexOf(a.id);
+                    const idxB = savedIds.indexOf(b.id);
+                    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                    if (idxA !== -1) return -1;
+                    if (idxB !== -1) return 1;
+                    return 0;
+                  });
+                }
+              }
+            } catch {}
+          }
+          setDbProducts(list);
         }
       } catch (err) {
         console.error('Error fetching partner_products:', err);

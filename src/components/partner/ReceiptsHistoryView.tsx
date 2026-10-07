@@ -14,6 +14,7 @@ export const ReceiptsHistoryView: React.FC = () => {
   const [refundReason, setRefundReason] = useState<string>('შეცდომით გატარებული ჩეკი (დაბრუნება ვიტრინაში)');
   const [editPaymentMethod, setEditPaymentMethod] = useState<'card' | 'cash' | 'split' | 'free'>('card');
   const [editSplitCash, setEditSplitCash] = useState<string>('10');
+  const [editTotalAmount, setEditTotalAmount] = useState<string>('');
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
   if (!currentPoint) {
@@ -80,22 +81,26 @@ export const ReceiptsHistoryView: React.FC = () => {
 
   const handleSavePaymentEdit = (sale: PartnerSale) => {
     const isFree = editPaymentMethod === 'free';
+    const parsedAmount = parseFloat(editTotalAmount);
+    const finalAmount = isFree ? 0 : (!isNaN(parsedAmount) && parsedAmount >= 0 ? parsedAmount : sale.totalAmount);
+
     let splitDet = undefined;
     if (editPaymentMethod === 'split') {
       const c = parseFloat(editSplitCash) || 0;
-      splitDet = { cashAmount: c, cardAmount: Math.max(0, sale.totalAmount - c) };
+      splitDet = { cashAmount: c, cardAmount: Math.max(0, finalAmount - c) };
     }
 
     const ok = editSale({
       saleId: sale.id,
       paymentMethod: editPaymentMethod,
       discountType: isFree ? 'free' : (sale.discountType === 'free' ? 'none' : sale.discountType),
+      totalAmount: finalAmount,
       splitDetails: editPaymentMethod === 'split' ? splitDet : undefined,
     });
 
     if (ok) {
       setSelectedSaleToManage(null);
-      setAlertMsg(`ჩეკის #${sale.receiptNumber} გადახდის მეთოდი განახლდა.`);
+      setAlertMsg(`ჩეკის #${sale.receiptNumber} გადახდის მონაცემები განახლდა.`);
       setTimeout(() => setAlertMsg(null), 4000);
     }
   };
@@ -410,6 +415,7 @@ export const ReceiptsHistoryView: React.FC = () => {
                                 setSelectedSaleToManage(sale);
                                 setEditPaymentMethod(sale.paymentMethod);
                                 setEditSplitCash(sale.splitDetails?.cashAmount?.toString() || '10');
+                                setEditTotalAmount(sale.totalAmount.toFixed(2));
                               }}
                               className="partner-min-btn-outline"
                               style={{ fontSize: '11px', padding: '4px 8px' }}
@@ -542,6 +548,36 @@ export const ReceiptsHistoryView: React.FC = () => {
                 </button>
               </div>
 
+              {/* Amount input */}
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ fontSize: '11.5px', color: '#94A3B8', display: 'block', marginBottom: '4px' }}>
+                  ჩეკის / შეტანილი თანხა (₾):
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    disabled={editPaymentMethod === 'free'}
+                    value={editPaymentMethod === 'free' ? '0.00' : editTotalAmount}
+                    onChange={e => setEditTotalAmount(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 30px 8px 10px',
+                      background: '#181B22',
+                      border: '1px solid #282E3A',
+                      borderRadius: '6px',
+                      color: editPaymentMethod === 'free' ? '#A855F7' : '#FFFFFF',
+                      fontSize: '15px',
+                      fontWeight: 700,
+                    }}
+                  />
+                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', fontWeight: 700 }}>
+                    ₾
+                  </span>
+                </div>
+              </div>
+
               {editPaymentMethod === 'split' && (
                 <div style={{ marginBottom: '10px' }}>
                   <label style={{ fontSize: '11px', color: '#94A3B8' }}>ნაღდი თანხა (₾):</label>
@@ -561,7 +597,7 @@ export const ReceiptsHistoryView: React.FC = () => {
                     }}
                   />
                   <div style={{ fontSize: '11px', color: '#38BDF8', marginTop: '4px' }}>
-                    ბარათით დარჩება: {Math.max(0, selectedSaleToManage.totalAmount - (parseFloat(editSplitCash) || 0))} ₾
+                    ბარათით დარჩება: {Math.max(0, (parseFloat(editTotalAmount) || selectedSaleToManage.totalAmount) - (parseFloat(editSplitCash) || 0)).toFixed(2)} ₾
                   </div>
                 </div>
               )}
@@ -571,7 +607,7 @@ export const ReceiptsHistoryView: React.FC = () => {
                 className="partner-min-btn-outline"
                 style={{ width: '100%', padding: '8px', fontWeight: 700 }}
               >
-                მეთოდის შენახვა
+                მონაცემების შენახვა
               </button>
             </div>
 

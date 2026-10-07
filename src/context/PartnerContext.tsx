@@ -16,7 +16,7 @@ import {
   initialSales, 
   initialWriteOffs 
 } from '@/data/partnerData';
-import { partnerDbService } from '@/services/partnerDbService';
+import { partnerDbService, sortPartnerProducts } from '@/services/partnerDbService';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 interface CompleteSaleParams {
@@ -36,6 +36,7 @@ export interface EditSaleParams {
   items?: { productId: string; productName: string; quantity: number; pricePerUnit: number; totalPrice: number }[];
   discountType?: 'none' | 'percent50' | 'free' | 'fixed4';
   discountComment?: string;
+  totalAmount?: number;
   notes?: string;
 }
 
@@ -98,7 +99,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // 1. Products (Strictly and dynamically from Supabase database `partner_products`)
     try {
       const dbProducts = await partnerDbService.getProducts();
-      setProducts(dbProducts || []);
+      setProducts(sortPartnerProducts(dbProducts || []));
     } catch (e) {
       console.warn('Supabase products fetch error:', e);
       setProducts([]);
@@ -154,11 +155,23 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Load directly from Supabase on mount
+  // Load directly from Supabase on mount & listen to local storage order changes
   useEffect(() => {
     loadAllData();
 
-    if (!isSupabaseConfigured) return;
+    // Re-sort products immediately when admin updates dish ordering
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'fitfood_admin_dishes_order') {
+        setProducts(prev => sortPartnerProducts(prev));
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    if (!isSupabaseConfigured) {
+      return () => {
+        window.removeEventListener('storage', handleStorageChange);
+      };
+    }
 
     // Realtime listener for products, sales, stocks, shipments
     try {
@@ -166,7 +179,9 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .channel('partner_realtime_sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_products' }, async () => {
           const freshProducts = await partnerDbService.getProducts();
-          if (freshProducts && freshProducts.length > 0) setProducts(freshProducts);
+          if (freshProducts && freshProducts.length > 0) {
+            setProducts(sortPartnerProducts(freshProducts));
+          }
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_sales' }, async () => {
           const freshSales = await partnerDbService.getSales();
@@ -183,10 +198,14 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .subscribe();
 
       return () => {
+        window.removeEventListener('storage', handleStorageChange);
         supabase.removeChannel(channel);
       };
     } catch (e) {
       console.warn('Supabase Realtime subscription error:', e);
+      return () => {
+        window.removeEventListener('storage', handleStorageChange);
+      };
     }
   }, []);
 
@@ -356,6 +375,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     items,
     discountType,
     discountComment,
+    totalAmount: customTotalAmount,
     notes,
   }: EditSaleParams): boolean => {
     const targetSale = sales.find(s => s.id === saleId);
@@ -412,7 +432,8 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
             discountAmount = originalAmount;
           }
 
-          const totalAmount = Math.max(0, originalAmount - discountAmount);
+          const calculatedTotal = Math.max(0, originalAmount - discountAmount);
+          const totalAmount = customTotalAmount !== undefined ? customTotalAmount : calculatedTotal;
           const isFree = finalDiscountType === 'free' || totalAmount === 0;
           const finalPayMethod = isFree ? 'free' : (paymentMethod || sale.paymentMethod);
 

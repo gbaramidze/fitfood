@@ -6,8 +6,36 @@ import {
   PartnerShipment,
   PartnerWriteOff,
 } from '@/types/partner';
-
 import { mapSupabaseProductToAdminDish } from '@/lib/adminDishMapper';
+
+// Helper to sort partner products according to custom admin order or sortOrder field
+export function sortPartnerProducts(products: PartnerProduct[]): PartnerProduct[] {
+  if (!products || products.length === 0) return [];
+  const list = [...products];
+
+  if (typeof window !== 'undefined') {
+    try {
+      const savedOrderStr = localStorage.getItem('fitfood_admin_dishes_order');
+      if (savedOrderStr) {
+        const savedIds: string[] = JSON.parse(savedOrderStr);
+        if (Array.isArray(savedIds) && savedIds.length > 0) {
+          list.sort((a, b) => {
+            const idxA = savedIds.indexOf(a.id);
+            const idxB = savedIds.indexOf(b.id);
+            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+            if (idxA !== -1) return -1;
+            if (idxB !== -1) return 1;
+            return (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999);
+          });
+          return list;
+        }
+      }
+    } catch {}
+  }
+
+  list.sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999));
+  return list;
+}
 
 export const partnerDbService = {
   // 1. Fetch Points
@@ -40,7 +68,7 @@ export const partnerDbService = {
         .from('partner_products')
         .select('id, name, category, category_name, price, cost_price, calories, weight_grams, image, badge, created_at, slug, description, meal_type, day, protein, fat, carbs, ingredients, allergens, cooking_method, target_channels, updated_at');
       if (error || !data || data.length === 0) return null;
-      return data.map(prod => {
+      const mapped = data.map(prod => {
         const dish = mapSupabaseProductToAdminDish(prod);
 
         // Normalize Category
@@ -56,7 +84,7 @@ export const partnerDbService = {
           defaultCatName = { ka: 'ხორცის რაციონები', ru: 'Мясные рационы', en: 'Meat Meals' };
         } else if (rawCat.includes('breakfast') || rawCat.includes('morning') || rawCat.includes('საუზმ') || rawCat.includes('завтрак')) {
           cat = 'breakfast';
-          defaultCatName = { ka: 'საუზმე', ru: 'Завтраки', en: 'Breakfast' };
+          defaultCatName = { ka: 'საუზმე', ru: 'Заვтраки', en: 'Breakfast' };
         } else if (rawCat.includes('drink') || rawCat.includes('detox') || rawCat.includes('სასმელ') || rawCat.includes('напит')) {
           cat = 'drinks';
           defaultCatName = { ka: 'სასმელები / დეტოქსი', ru: 'Напитки и Детокс', en: 'Drinks & Detox' };
@@ -98,8 +126,11 @@ export const partnerDbService = {
           weightGrams: Number(prod.weight_grams) || dish.macros?.weightGrams || 320,
           image: (prod as any).image || dish.image || '/images/meals/chicken-ptitim.webp',
           badge: badgeObj,
+          sortOrder: dish.sortOrder ?? ((prod as any).sort_order !== undefined ? Number((prod as any).sort_order) : undefined),
         };
       });
+
+      return sortPartnerProducts(mapped);
     } catch (e) {
       console.warn('Error fetching products from Supabase:', e);
       return null;
@@ -283,6 +314,15 @@ export const partnerDbService = {
       });
     } catch (e) {
       console.warn('Error saving write-off to Supabase:', e);
+    }
+  },
+
+  async deleteWriteOff(writeOffId: string) {
+    if (!isSupabaseConfigured) return;
+    try {
+      await supabase.from('partner_write_offs').delete().eq('id', writeOffId);
+    } catch (e) {
+      console.warn('Error deleting write-off in Supabase:', e);
     }
   },
 

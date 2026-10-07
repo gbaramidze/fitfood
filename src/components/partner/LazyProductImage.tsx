@@ -33,16 +33,15 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
 
   const isDataUrl = imageSrc.startsWith('data:') || imageSrc.startsWith('http');
 
+  const widthStyle = width ? (typeof width === 'number' ? `${width}px` : width) : '100%';
+  const heightStyle = height ? (typeof height === 'number' ? `${height}px` : height) : '100%';
+
   return (
     <div
       style={{
-        position: fill ? 'absolute' : 'relative',
-        top: fill ? 0 : undefined,
-        left: fill ? 0 : undefined,
-        right: fill ? 0 : undefined,
-        bottom: fill ? 0 : undefined,
-        width: fill ? '100%' : width,
-        height: fill ? '100%' : height,
+        position: 'relative',
+        width: widthStyle,
+        height: heightStyle,
         overflow: 'hidden',
         background: '#181B22',
         ...style,
@@ -51,10 +50,8 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
       <Image
         src={imageSrc}
         alt={alt}
-        fill={fill}
-        width={!fill ? width : undefined}
-        height={!fill ? height : undefined}
-        sizes={sizes || '200px'}
+        fill
+        sizes={sizes || (width ? `${width}px` : '200px')}
         className={className}
         unoptimized={isDataUrl}
         style={{

@@ -43,6 +43,7 @@ export interface PartnerProduct {
     ka: string;
     en: string;
   };
+  sortOrder?: number;
 }
 
 export interface PartnerStockItem {
@@ -105,8 +106,10 @@ export interface PartnerWriteOff {
   productId: string;
   productName: string;
   quantity: number;
-  reason: 'expired' | 'damaged' | 'sample' | 'other';
+  reason: 'expired' | 'damaged' | 'sample' | 'kitchen_waste' | 'other' | string;
   reasonText: string;
   createdAt: string;
   notes?: string;
+  costPrice?: number;
+  retailPrice?: number;
 }

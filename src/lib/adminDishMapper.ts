@@ -141,6 +141,7 @@ export function mapSupabaseProductToAdminDish(row: any): AdminDish {
     ingredients: { ka: ingKa, ru: ingRu, en: ingEn },
     isGeorgianFit: true,
     inStockCount: Number(row.in_stock_count) || Number(row.inStockCount) || 0,
+    sortOrder: row.sort_order !== undefined ? Number(row.sort_order) : row.sortOrder !== undefined ? Number(row.sortOrder) : undefined,
     createdAt: row.created_at || new Date().toISOString(),
   };
 }

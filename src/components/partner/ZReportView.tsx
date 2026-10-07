@@ -24,12 +24,14 @@ export const ZReportView: React.FC = () => {
   const [editItems, setEditItems] = useState<PartnerSaleItem[]>([]);
   const [editDiscountType, setEditDiscountType] = useState<'none' | 'percent50' | 'free' | 'fixed4'>('none');
   const [editDiscountComment, setEditDiscountComment] = useState<string>('');
+  const [editCustomTotal, setEditCustomTotal] = useState<string>('');
   const [editNotes, setEditNotes] = useState<string>('');
   const [selectedProductToAdd, setSelectedProductToAdd] = useState<string>('');
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [refundReason, setRefundReason] = useState<string>('შეცდომით გატარებული ჩეკი / საქონლის დაბრუნება');
 
   const [filterPaymentType, setFilterPaymentType] = useState<'all' | 'card' | 'cash' | 'split' | 'free' | 'discount'>('all');
+  const [selectedCategoryFilters, setSelectedCategoryFilters] = useState<string[]>([]);
 
   const activePoint = points.find(p => p.id === (selectedPointId === 'all' ? currentPoint?.id : selectedPointId)) || currentPoint;
 
@@ -91,6 +93,9 @@ export const ZReportView: React.FC = () => {
   > = {};
 
   activeSales.forEach(sale => {
+    const rawSubtotal = sale.items.reduce((sum, it) => sum + it.totalPrice, 0) || 1;
+    const discountRatio = sale.totalAmount / rawSubtotal;
+
     sale.items.forEach(item => {
       if (!productSummaryMap[item.productId]) {
         const pObj = products.find(p => p.id === item.productId);
@@ -102,13 +107,53 @@ export const ZReportView: React.FC = () => {
         };
       }
       productSummaryMap[item.productId].quantity += item.quantity;
-      productSummaryMap[item.productId].totalSum += item.totalPrice;
+      productSummaryMap[item.productId].totalSum += item.totalPrice * discountRatio;
     });
   });
+
+  const getProductCategory = (prod?: PartnerProduct, fallbackName?: string): string => {
+    if (prod?.category) {
+      const c = prod.category.toLowerCase();
+      if (c.includes('poultry') || c.includes('chicken') || c.includes('ქათამ') || c.includes('птиც')) return 'poultry';
+      if (c.includes('meat') || c.includes('beef') || c.includes('pork') || c.includes('ხორც') || c.includes('мяс')) return 'meat';
+      if (c.includes('fish') || c.includes('seafood') || c.includes('თევზ') || c.includes('рыб')) return 'fish';
+      if (c.includes('breakfast') || c.includes('morning') || c.includes('საუზმ') || c.includes('завтрак')) return 'breakfast';
+      if (c.includes('salad') || c.includes('სალათ') || c.includes('салат')) return 'salad';
+      if (c.includes('soup') || c.includes('წვნიან') || c.includes('სუპ') || c.includes('суп')) return 'soup';
+      if (c.includes('dessert') || c.includes('snack') || c.includes('დესერტ') || c.includes('десерт')) return 'dessert';
+      if (c.includes('drink') || c.includes('detox') || c.includes('სასმელ') || c.includes('напит') || c.includes('смузи')) return 'drinks';
+      return c;
+    }
+    const name = (fallbackName || '').toLowerCase();
+    if (name.includes('ქათამ') || name.includes('куриц') || name.includes('филе') || name.includes('chicken')) return 'poultry';
+    if (name.includes('ხორც') || name.includes('мяс') || name.includes('говяд') || name.includes('beef')) return 'meat';
+    if (name.includes('თევზ') || name.includes('рыб') || name.includes('лосос') || name.includes('fish') || name.includes('семг')) return 'fish';
+    if (name.includes('საუზმ') || name.includes('სირნიკ') || name.includes('сырник') || name.includes('творог') || name.includes('breakfast')) return 'breakfast';
+    if (name.includes('სალათ') || name.includes('салат') || name.includes('salad')) return 'salad';
+    if (name.includes('სუპ') || name.includes('წვნიან') || name.includes('суп') || name.includes('борщ') || name.includes('soup')) return 'soup';
+    if (name.includes('დესერტ') || name.includes('десерт') || name.includes('чиа') || name.includes('мусс') || name.includes('chia')) return 'dessert';
+    if (name.includes('სასმელ') || name.includes('напит') || name.includes('сок') || name.includes('смузи') || name.includes('smoothie')) return 'drinks';
+    return 'other';
+  };
 
   const productBreakdownList = Object.values(productSummaryMap).sort(
     (a, b) => b.quantity - a.quantity
   );
+
+  const filteredProductBreakdownList = productBreakdownList.filter(item => {
+    if (selectedCategoryFilters.length === 0) return true;
+    const cat = getProductCategory(item.product, item.name);
+    return selectedCategoryFilters.includes(cat);
+  });
+
+  const filteredPortions = filteredProductBreakdownList.reduce((sum, item) => sum + item.quantity, 0);
+  const filteredRevenue = filteredProductBreakdownList.reduce((sum, item) => sum + item.totalSum, 0);
+
+  const toggleZCategory = (catId: string) => {
+    setSelectedCategoryFilters(prev =>
+      prev.includes(catId) ? prev.filter(c => c !== catId) : [...prev, catId]
+    );
+  };
 
   // Open Edit Modal
   const handleOpenEdit = (sale: PartnerSale) => {
@@ -119,6 +164,7 @@ export const ZReportView: React.FC = () => {
     setEditItems(sale.items.map(it => ({ ...it })));
     setEditDiscountType(isFree ? 'free' : (sale.discountType || 'none'));
     setEditDiscountComment(sale.discountComment || '');
+    setEditCustomTotal(sale.totalAmount.toFixed(2));
     setEditNotes(sale.notes || '');
     setSelectedProductToAdd('');
   };
@@ -188,7 +234,12 @@ export const ZReportView: React.FC = () => {
   } else if (editDiscountType === 'free' || editPaymentMethod === 'free') {
     editDiscountAmt = editSubtotal;
   }
-  const editFinalTotal = Math.max(0, editSubtotal - editDiscountAmt);
+  const editAutoTotal = Math.max(0, editSubtotal - editDiscountAmt);
+
+  const parsedCustom = parseFloat(editCustomTotal);
+  const isCustomValid = !isNaN(parsedCustom) && parsedCustom >= 0;
+  const isFree = editPaymentMethod === 'free' || editDiscountType === 'free';
+  const editFinalTotal = isFree ? 0 : (isCustomValid ? parsedCustom : editAutoTotal);
 
   // Save edits
   const handleSaveEdit = () => {
@@ -198,7 +249,6 @@ export const ZReportView: React.FC = () => {
       return;
     }
 
-    const isFree = editPaymentMethod === 'free' || editDiscountType === 'free';
     const effectivePaymentMethod = isFree ? 'free' : editPaymentMethod;
     const effectiveDiscountType = isFree ? 'free' : editDiscountType;
 
@@ -217,6 +267,7 @@ export const ZReportView: React.FC = () => {
       discountType: effectiveDiscountType,
       discountComment: editDiscountComment.trim() || undefined,
       paymentMethod: effectivePaymentMethod,
+      totalAmount: editFinalTotal,
       splitDetails: effectivePaymentMethod === 'split' ? splitDet : undefined,
       notes: editNotes.trim() || undefined,
     });
@@ -375,13 +426,87 @@ export const ZReportView: React.FC = () => {
             </span>
           </h3>
           <span className="stock-count-tag" style={{ fontSize: '12.5px', color: '#CBD5E1' }}>
-            სულ პოზიციები: <strong>{totalPortions} ც.</strong> თანხით: <strong>{totalRevenue.toFixed(2)} ₾</strong>
+            {selectedCategoryFilters.length > 0 ? (
+              <>
+                არჩეული: <strong style={{ color: '#34D399' }}>{filteredPortions} ც.</strong> თანხით:{' '}
+                <strong style={{ color: '#34D399' }}>{filteredRevenue.toFixed(2)} ₾</strong>
+                <span style={{ color: '#94A3B8', marginLeft: '6px' }}>
+                  (სულ: {totalPortions} ც. / {totalRevenue.toFixed(2)} ₾)
+                </span>
+              </>
+            ) : (
+              <>
+                სულ პოზიციები: <strong>{totalPortions} ც.</strong> თანხით:{' '}
+                <strong>{totalRevenue.toFixed(2)} ₾</strong>
+              </>
+            )}
           </span>
         </div>
 
-        {productBreakdownList.length === 0 ? (
+        {/* Category Pills Filter */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px', marginBottom: '14px', alignItems: 'center' }}>
+          <span style={{ fontSize: '11.5px', color: '#94A3B8', fontWeight: 600 }}>კატეგორია:</span>
+          <button
+            type="button"
+            onClick={() => setSelectedCategoryFilters([])}
+            style={{
+              background: selectedCategoryFilters.length === 0 ? '#FFFFFF' : '#181B22',
+              color: selectedCategoryFilters.length === 0 ? '#090A0F' : '#94A3B8',
+              border: '1px solid #282E3A',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              fontSize: '11.5px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            ყველა ({productBreakdownList.length})
+          </button>
+          {[
+            { id: 'poultry', label: 'ქათამი', icon: '🍗' },
+            { id: 'meat', label: 'ხორცი', icon: '🥩' },
+            { id: 'fish', label: 'თევზი', icon: '🐟' },
+            { id: 'breakfast', label: 'საუზმე', icon: '🥞' },
+            { id: 'salad', label: 'სალათი', icon: '🥗' },
+            { id: 'soup', label: 'სუპი', icon: '🍲' },
+            { id: 'dessert', label: 'დესერტი', icon: '🧁' },
+            { id: 'drinks', label: 'სასმელი', icon: '🥤' },
+          ].map(c => {
+            const isSel = selectedCategoryFilters.includes(c.id);
+            const count = productBreakdownList.filter(item => getProductCategory(item.product, item.name) === c.id).length;
+            if (count === 0 && !isSel) return null;
+
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => toggleZCategory(c.id)}
+                style={{
+                  background: isSel ? 'rgba(16, 185, 129, 0.18)' : '#181B22',
+                  color: isSel ? '#34D399' : '#CBD5E1',
+                  border: `1px solid ${isSel ? '#10B981' : '#282E3A'}`,
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  fontSize: '11.5px',
+                  fontWeight: isSel ? 700 : 500,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span>{c.icon} {c.label}</span>
+                <span style={{ fontSize: '10px', opacity: 0.8 }}>({count})</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {filteredProductBreakdownList.length === 0 ? (
           <div className="partner-min-empty-card" style={{ padding: '24px 0', textAlign: 'center' }}>
-            <p style={{ color: '#64748B', fontSize: '13px' }}>არჩეულ თარიღში გაყიდვები ჯერ არ დაფიქსირებულა.</p>
+            <p style={{ color: '#64748B', fontSize: '13px' }}>
+              {selectedCategoryFilters.length > 0 ? 'არჩეული კატეგორიით გაყიდვები არ მოიძებნა.' : 'არჩეულ თარიღში გაყიდვები ჯერ არ დაფიქსირებულა.'}
+            </p>
           </div>
         ) : (
           <div className="partner-min-table-wrap">
@@ -398,7 +523,7 @@ export const ZReportView: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {productBreakdownList.map((item, idx) => {
+                {filteredProductBreakdownList.map((item, idx) => {
                   const sharePercent = totalPortions > 0 ? (item.quantity / totalPortions) * 100 : 0;
                   const currentStock = activePoint && item.product ? getPointStock(activePoint.id, item.product.id) : 0;
 
@@ -470,11 +595,27 @@ export const ZReportView: React.FC = () => {
               <tfoot>
                 <tr style={{ fontWeight: 700, borderTop: '2px solid #334155', background: '#0F172A' }}>
                   <td></td>
-                  <td>სულ პოზიციები</td>
+                  <td>
+                    {selectedCategoryFilters.length > 0
+                      ? `სულ არჩეული (${filteredProductBreakdownList.length} პოზ.)`
+                      : 'სულ პოზიციები'}
+                  </td>
                   <td>—</td>
-                  <td style={{ textAlign: 'center' }}>{totalPortions} ც.</td>
-                  <td>{totalRevenue.toFixed(2)} ₾</td>
-                  <td>100%</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{ color: selectedCategoryFilters.length > 0 ? '#34D399' : '#FFFFFF', fontWeight: 800, fontSize: '14px' }}>
+                      {filteredPortions} ც.
+                    </span>
+                  </td>
+                  <td>
+                    <strong style={{ color: selectedCategoryFilters.length > 0 ? '#34D399' : '#E2E8F0', fontSize: '14px' }}>
+                      {filteredRevenue.toFixed(2)} ₾
+                    </strong>
+                  </td>
+                  <td>
+                    {totalPortions > 0
+                      ? `${((filteredPortions / totalPortions) * 100).toFixed(0)}%`
+                      : '100%'}
+                  </td>
                   {activePoint && <td>—</td>}
                 </tr>
               </tfoot>
@@ -938,10 +1079,71 @@ export const ZReportView: React.FC = () => {
               )}
             </div>
 
-            {/* Part 4: Notes */}
+            {/* Part 4: Сумма к оплате / Внесённая сумма */}
+            <div style={{ background: '#181B22', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <strong style={{ fontSize: '13.5px', color: '#E2E8F0' }}>
+                  4. ჩეკის / შეტანილი თანხის რედაქტირება (₾):
+                </strong>
+                {!isFree && (
+                  <button
+                    type="button"
+                    onClick={() => setEditCustomTotal(editAutoTotal.toFixed(2))}
+                    style={{
+                      background: '#282E3A',
+                      border: '1px solid #334155',
+                      borderRadius: '6px',
+                      color: '#38BDF8',
+                      fontSize: '11px',
+                      padding: '3px 8px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                    title="ავტომატურად გამოთვლილი თანხის დაყენება"
+                  >
+                    ↺ ავტო-გამოთვლა ({editAutoTotal.toFixed(2)} ₾)
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    disabled={isFree}
+                    placeholder="ჩეკის თანხა (₾)..."
+                    value={isFree ? '0.00' : editCustomTotal}
+                    onChange={e => setEditCustomTotal(e.target.value)}
+                    className="partner-min-input"
+                    style={{
+                      width: '100%',
+                      fontSize: '16px',
+                      fontWeight: 700,
+                      color: isFree ? '#A855F7' : '#FFFFFF',
+                      paddingRight: '28px',
+                    }}
+                  />
+                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', fontWeight: 700 }}>
+                    ₾
+                  </span>
+                </div>
+                {editDiscountAmt > 0 && !isFree && (
+                  <div style={{ fontSize: '11.5px', color: '#10B981', whiteSpace: 'nowrap' }}>
+                    (ფასდაკლება: -{editDiscountAmt.toFixed(2)} ₾)
+                  </div>
+                )}
+              </div>
+              <span style={{ fontSize: '11px', color: '#64748B', marginTop: '5px', display: 'block' }}>
+                💡 შეგიძლიათ ხელით ჩაწეროთ ნებისმიერი ფაქტობრივად მიღებული/შეტანილი თანხა.
+              </span>
+            </div>
+
+            {/* Part 5: Notes */}
             <div style={{ marginBottom: '16px' }}>
               <label style={{ fontSize: '12px', color: '#94A3B8', display: 'block', marginBottom: '4px' }}>
-                შენიშვნა ოპერაციაზე:
+                5. შენიშვნა ოპერაციაზე:
               </label>
               <input
                 type="text"
@@ -967,14 +1169,14 @@ export const ZReportView: React.FC = () => {
               }}
             >
               <div>
-                <span style={{ fontSize: '13px', color: '#94A3B8' }}>ჩეკის ახალი თანხა:</span>
+                <span style={{ fontSize: '13px', color: '#94A3B8' }}>ჩეკის საბოლოო თანხა:</span>
                 {editDiscountAmt > 0 && (
                   <span style={{ fontSize: '11.5px', color: '#10B981', marginLeft: '6px' }}>
                     (ფასდაკლება: -{editDiscountAmt.toFixed(2)} ₾)
                   </span>
                 )}
               </div>
-              <strong style={{ fontSize: '20px', color: '#FFFFFF' }}>
+              <strong style={{ fontSize: '20px', color: isFree ? '#A855F7' : '#FFFFFF' }}>
                 {editFinalTotal.toFixed(2)} ₾
               </strong>
             </div>

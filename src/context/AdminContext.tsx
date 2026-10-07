@@ -13,13 +13,14 @@ import {
   ExpenseCategory,
   EmployeeRole
 } from '@/types/admin';
-import { PartnerPoint, PartnerSale } from '@/types/partner';
+import { PartnerPoint, PartnerSale, PartnerWriteOff } from '@/types/partner';
 import { 
   initialAdminPrograms, 
   initialAdminBlogPosts
 } from '@/data/adminInitialData';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { mapSupabaseProductToAdminDish } from '@/lib/adminDishMapper';
+import { partnerDbService } from '@/services/partnerDbService';
 
 export type AdminTab = 
   | 'overview'    // მთავარი მიმოხილვა
@@ -29,6 +30,7 @@ export type AdminTab =
   | 'programs'    // რაციონები & მოთხოვნა
   | 'dishes'      // კერძების ბაზა & დღეები
   | 'transfers'   // ლოჯისტიკა წერტილებზე
+  | 'writeoffs'   // საქონლის ჩამოწერა (სписание товаров)
   | 'expenses'    // ხარჯები & ხელფასები
   | 'points';     // წერტილების პარამეტრები
 
@@ -51,6 +53,7 @@ interface AdminContextType {
   points: PartnerPoint[];
   stocks: Record<string, Record<string, number>>;
   sales: PartnerSale[];
+  writeOffs: PartnerWriteOff[];
   blogPosts: AdminBlogPost[];
 
   // Financial calculations
@@ -65,6 +68,7 @@ interface AdminContextType {
   addDish: (dish: Omit<AdminDish, 'id' | 'createdAt'>) => Promise<AdminDish>;
   updateDish: (id: string, updates: Partial<AdminDish>) => Promise<boolean>;
   deleteDish: (id: string) => Promise<boolean>;
+  setDishesOrder: (orderedDishes: AdminDish[]) => Promise<boolean>;
 
   // Programs Actions
   addProgram: (program: Omit<AdminProgram, 'id'>) => AdminProgram;
@@ -87,6 +91,10 @@ interface AdminContextType {
   createTransfer: (pointId: string, items: { productId: string; quantity: number }[], note?: string) => Promise<AdminPointTransfer>;
   updatePointStock: (pointId: string, productId: string, qty: number) => Promise<void>;
   updateProductPrices: (productId: string, retailPrice: number, costPrice?: number) => void;
+
+  // Write-offs (Списания и порча товаров)
+  createWriteOff: (pointId: string, productId: string, quantity: number, reason?: string, reasonText?: string, notes?: string) => Promise<PartnerWriteOff>;
+  deleteWriteOff: (id: string, restoreStock?: boolean) => Promise<boolean>;
 
   // Expenses & Salaries
   addExpense: (expense: Omit<AdminExpense, 'id' | 'createdAt'>) => AdminExpense;
@@ -145,6 +153,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
   const [points, setPoints] = useState<PartnerPoint[]>(initialServerPoints);
   const [stocks, setStocks] = useState<Record<string, Record<string, number>>>({});
   const [sales, setSales] = useState<PartnerSale[]>(initialServerSales);
+  const [writeOffs, setWriteOffs] = useState<PartnerWriteOff[]>([]);
   const [blogPosts, setBlogPosts] = useState<AdminBlogPost[]>(initialAdminBlogPosts);
 
   // Sync server props when available
@@ -178,7 +187,34 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
         .select('id, name, category, category_name, price, cost_price, calories, weight_grams, image, badge, created_at, slug, description, meal_type, day, protein, fat, carbs, ingredients, allergens, cooking_method, target_channels, updated_at');
 
       if (!prodErr && dbProducts && dbProducts.length > 0) {
-        const mapped = dbProducts.map(mapSupabaseProductToAdminDish);
+        let mapped = dbProducts.map(mapSupabaseProductToAdminDish);
+
+        // Sort by custom saved order or sortOrder
+        if (typeof window !== 'undefined') {
+          try {
+            const savedOrderStr = localStorage.getItem('fitfood_admin_dishes_order');
+            if (savedOrderStr) {
+              const savedIds: string[] = JSON.parse(savedOrderStr);
+              if (Array.isArray(savedIds) && savedIds.length > 0) {
+                mapped.sort((a, b) => {
+                  const idxA = savedIds.indexOf(a.id);
+                  const idxB = savedIds.indexOf(b.id);
+                  if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                  if (idxA !== -1) return -1;
+                  if (idxB !== -1) return 1;
+                  return 0;
+                });
+              }
+            } else {
+              mapped.sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999));
+            }
+          } catch {
+            mapped.sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999));
+          }
+        } else {
+          mapped.sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999));
+        }
+
         setDishes(mapped);
       }
     } catch (e) {
@@ -224,11 +260,9 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
 
       // 4. Fetch Points
       try {
-        const { data: dbPts, error: ptsErr } = await supabase
-          .from('partner_points')
-          .select('*');
-        if (!ptsErr && dbPts && dbPts.length > 0) {
-          setPoints(dbPts);
+        const pts = await partnerDbService.getPoints();
+        if (pts && pts.length > 0) {
+          setPoints(pts);
         }
       } catch (e) {
         console.warn('Supabase points fetch error:', e);
@@ -236,11 +270,8 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
 
       // 5. Fetch Sales
       try {
-        const { data: dbSales, error: salesErr } = await supabase
-          .from('partner_sales')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (!salesErr && dbSales && dbSales.length > 0) {
+        const dbSales = await partnerDbService.getSales();
+        if (dbSales && dbSales.length > 0) {
           setSales(dbSales);
         }
       } catch (e) {
@@ -249,15 +280,8 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
 
       // 6. Fetch Stocks
       try {
-        const { data: dbStocks, error: stocksErr } = await supabase
-          .from('partner_stocks')
-          .select('*');
-        if (!stocksErr && dbStocks && dbStocks.length > 0) {
-          const stocksMap: Record<string, Record<string, number>> = {};
-          dbStocks.forEach((row: any) => {
-            if (!stocksMap[row.point_id]) stocksMap[row.point_id] = {};
-            stocksMap[row.point_id][row.product_id] = row.quantity;
-          });
+        const stocksMap = await partnerDbService.getStocks();
+        if (stocksMap) {
           setStocks(stocksMap);
         }
       } catch (e) {
@@ -296,43 +320,69 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
       } catch (e) {
         console.warn('Supabase shipments fetch error:', e);
       }
+
+      // 8. Fetch Write-offs
+      try {
+        const dbWriteOffs = await partnerDbService.getWriteOffs();
+        if (dbWriteOffs) setWriteOffs(dbWriteOffs);
+      } catch (e) {
+        console.warn('Supabase writeoffs fetch error:', e);
+      }
     };
 
     fetchSupabaseData();
 
-    // Supabase Real-time listener for partner_products table
+    // Supabase Real-time listeners for products, sales and stocks
     try {
-      const channel = supabase
+      const prodChannel = supabase
         .channel('admin_products_realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_products' }, async () => {
           await refreshDishes();
         })
         .subscribe();
 
+      const salesChannel = supabase
+        .channel('admin_sales_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_sales' }, async () => {
+          const freshSales = await partnerDbService.getSales();
+          if (freshSales) setSales(freshSales);
+        })
+        .subscribe();
+
+      const stocksChannel = supabase
+        .channel('admin_stocks_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_stocks' }, async () => {
+          const freshStocks = await partnerDbService.getStocks();
+          if (freshStocks) setStocks(freshStocks);
+        })
+        .subscribe();
+
       return () => {
-        supabase.removeChannel(channel);
+        supabase.removeChannel(prodChannel);
+        supabase.removeChannel(salesChannel);
+        supabase.removeChannel(stocksChannel);
       };
     } catch (e) {
       console.warn('Realtime subscription error:', e);
     }
   }, []);
 
-  // Real Financial Calculations
+  // Real Financial Calculations (With Safe Number Fallbacks to prevent NaN)
   const posRevenue = useMemo(() => {
     return sales
       .filter(s => s.status === 'completed')
-      .reduce((sum, s) => sum + s.totalAmount, 0);
+      .reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0);
   }, [sales]);
 
   const siteRevenue = useMemo(() => {
     return customers
       .filter(c => c.paymentStatus === 'paid')
-      .reduce((sum, c) => sum + c.totalAmount, 0);
+      .reduce((sum, c) => sum + (Number(c.totalAmount) || 0), 0);
   }, [customers]);
 
-  const totalRevenue = posRevenue + siteRevenue;
-  const totalExpenses = useMemo(() => expenses.reduce((a, b) => a + b.amount, 0), [expenses]);
-  const totalPayroll = useMemo(() => salaries.reduce((a, b) => a + b.totalToPay, 0), [salaries]);
+  const totalRevenue = (Number(posRevenue) || 0) + (Number(siteRevenue) || 0);
+  const totalExpenses = useMemo(() => expenses.reduce((a, b) => a + (Number(b.amount) || 0), 0), [expenses]);
+  const totalPayroll = useMemo(() => salaries.reduce((a, b) => a + (Number(b.totalToPay) || 0), 0), [salaries]);
   const netProfit = totalRevenue - totalExpenses - totalPayroll;
 
   // Dishes Actions (Direct Supabase Upsert + Delete)
@@ -483,6 +533,40 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
         if (error) console.error('Supabase product delete error:', error);
       } catch (err) {
         console.error('Failed to delete dish from Supabase:', err);
+      }
+    }
+    return true;
+  };
+
+  const setDishesOrder = async (orderedDishes: AdminDish[]): Promise<boolean> => {
+    setDishes(orderedDishes);
+
+    if (typeof window !== 'undefined') {
+      try {
+        const idList = orderedDishes.map(d => d.id);
+        localStorage.setItem('fitfood_admin_dishes_order', JSON.stringify(idList));
+      } catch {}
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        const promises = orderedDishes.map((dish, index) =>
+          supabase
+            .from('partner_products')
+            .update({ sort_order: index, updated_at: new Date().toISOString() })
+            .eq('id', dish.id)
+        );
+        const results = await Promise.allSettled(promises);
+        results.forEach((res) => {
+          if (res.status === 'fulfilled' && (res.value as any)?.error) {
+            const err = (res.value as any).error;
+            if (err.code === 'PGRST204') {
+              console.info('Supabase: sort_order სვეტი ჯერ არ არსებობს partner_products ცხრილში. თანმიმდევრობა შენახულია ლოკალურად.');
+            }
+          }
+        });
+      } catch (err) {
+        console.warn('Could not update sort_order in Supabase:', err);
       }
     }
     return true;
@@ -713,6 +797,98 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
       }
       return d;
     }));
+  };
+
+  // Write-offs (Списание испорченных / поврежденных товаров)
+  const createWriteOff = async (
+    pointId: string,
+    productId: string,
+    quantity: number,
+    reason: string = 'expired',
+    reasonText?: string,
+    notes?: string
+  ): Promise<PartnerWriteOff> => {
+    const dish = dishes.find(d => d.id === productId);
+    const prodName = dish ? (typeof dish.name === 'object' ? (dish.name.ka || dish.name.ru || dish.name.en) : dish.name) : productId;
+    const costPrice = dish ? dish.costPrice : 0;
+    const retailPrice = dish ? dish.retailPrice : 15;
+
+    const finalReasonText = reasonText || (
+      reason === 'expired' ? 'ვადაგასული / გაფუჭდა (Истёк срок / испортился)' :
+      reason === 'damaged' ? 'დაზიანებული / ბრაკი (Поврежден / брак)' :
+      reason === 'sample' ? 'დეგუსტაცია / პრორაბოტკა (Дегустация)' :
+      reason === 'kitchen_waste' ? 'სამზარეულოს დანაკარგი (Кухонные потери)' : 'სხვა მიზეზი (Другое)'
+    );
+
+    const newWriteOff: PartnerWriteOff = {
+      id: `wo-${Date.now().toString(36)}-${Math.floor(100 + Math.random() * 900)}`,
+      pointId,
+      productId,
+      productName: prodName,
+      quantity,
+      reason,
+      reasonText: finalReasonText,
+      notes: notes || '',
+      costPrice,
+      retailPrice,
+      createdAt: new Date().toISOString(),
+    };
+
+    setWriteOffs(prev => [newWriteOff, ...prev]);
+
+    // Deduct quantity from point stock
+    const currentStock = stocks[pointId]?.[productId] || 0;
+    const nextStock = Math.max(0, currentStock - quantity);
+
+    setStocks(prev => ({
+      ...prev,
+      [pointId]: {
+        ...(prev[pointId] || {}),
+        [productId]: nextStock,
+      },
+    }));
+
+    // Persist write-off and updated stock to Supabase
+    try {
+      await partnerDbService.saveWriteOff(newWriteOff);
+      await partnerDbService.updateStock(pointId, productId, nextStock);
+    } catch (err) {
+      console.error('Error saving write-off to DB:', err);
+    }
+
+    return newWriteOff;
+  };
+
+  const deleteWriteOff = async (id: string, restoreStock: boolean = true): Promise<boolean> => {
+    const target = writeOffs.find(w => w.id === id);
+    if (target && restoreStock) {
+      const currentStock = stocks[target.pointId]?.[target.productId] || 0;
+      const restoredStock = currentStock + target.quantity;
+
+      setStocks(prev => ({
+        ...prev,
+        [target.pointId]: {
+          ...(prev[target.pointId] || {}),
+          [target.productId]: restoredStock,
+        },
+      }));
+
+      try {
+        await partnerDbService.updateStock(target.pointId, target.productId, restoredStock);
+      } catch (err) {
+        console.error('Error restoring stock on write-off delete:', err);
+      }
+    }
+
+    setWriteOffs(prev => prev.filter(w => w.id !== id));
+
+    try {
+      await partnerDbService.deleteWriteOff(id);
+    } catch (err) {
+      console.error('Error deleting write-off in DB:', err);
+    }
+
+    return true;
   };
 
   // Expenses & Salaries
@@ -956,6 +1132,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
         addDish,
         updateDish,
         deleteDish,
+        setDishesOrder,
         addProgram,
         updateProgram,
         deleteProgram,
@@ -970,6 +1147,9 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
         createTransfer,
         updatePointStock,
         updateProductPrices,
+        writeOffs,
+        createWriteOff,
+        deleteWriteOff,
         addExpense,
         deleteExpense,
         addSalaryRecord,

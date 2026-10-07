@@ -13,6 +13,7 @@ export const AdminSidebar: React.FC = () => {
     programs,
     dishes,
     transfers,
+    writeOffs,
     points 
   } = useAdmin();
 
@@ -61,6 +62,12 @@ export const AdminSidebar: React.FC = () => {
       label: 'წერტილების ლოჯისტიკა',
       icon: '🚚',
       count: transfers.length,
+    },
+    {
+      id: 'writeoffs',
+      label: 'საქონლის ჩამოწერა & ბრაკი',
+      icon: '🗑️',
+      count: writeOffs.length,
     },
     {
       id: 'expenses',

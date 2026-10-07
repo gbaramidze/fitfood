@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendTelegramMessage, formatSaleNotification, formatLeadNotification } from '@/lib/telegram';
+import { 
+  sendTelegramMessage, 
+  formatSaleNotification, 
+  formatLeadNotification,
+  getTodayStatsMessage,
+  getMonthStatsMessage,
+  handleTelegramCommand
+} from '@/lib/telegram';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { type, data, rawMessage } = body;
+    const { type, data, rawMessage, chatId, command } = body;
 
     let messageText = '';
+
+    if (command) {
+      const cmdResult = await handleTelegramCommand(command, chatId);
+      return NextResponse.json(cmdResult);
+    }
 
     if (rawMessage) {
       messageText = rawMessage;
@@ -14,14 +26,18 @@ export async function POST(req: NextRequest) {
       messageText = formatSaleNotification(data);
     } else if (type === 'lead') {
       messageText = formatLeadNotification(data);
+    } else if (type === 'stats' || type === 'today') {
+      messageText = await getTodayStatsMessage();
+    } else if (type === 'month') {
+      messageText = await getMonthStatsMessage();
     } else {
       return NextResponse.json({ success: false, error: 'Invalid notification type' }, { status: 400 });
     }
 
-    const result = await sendTelegramMessage(messageText);
+    const result = await sendTelegramMessage(messageText, chatId);
 
     if (result.success) {
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, message: messageText });
     } else {
       return NextResponse.json({ success: false, error: result.error }, { status: 500 });
     }

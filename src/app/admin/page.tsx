@@ -6,6 +6,8 @@ import { PartnerPoint, PartnerSale } from '@/types/partner';
 
 import { mapSupabaseProductToAdminDish } from '@/lib/adminDishMapper';
 
+import { partnerDbService } from '@/services/partnerDbService';
+
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -42,17 +44,12 @@ export default async function AdminPage() {
       if (dbSal && dbSal.length > 0) initialSalaries = dbSal;
 
       // 4. SSR Fetch Points
-      const { data: dbPts } = await supabase
-        .from('partner_points')
-        .select('*');
-      if (dbPts && dbPts.length > 0) initialPoints = dbPts;
+      const pts = await partnerDbService.getPoints();
+      if (pts && pts.length > 0) initialPoints = pts;
 
-      // 5. SSR Fetch Sales
-      const { data: dbSales } = await supabase
-        .from('partner_sales')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (dbSales && dbSales.length > 0) initialSales = dbSales;
+      // 5. SSR Fetch Sales (properly mapped to PartnerSale)
+      const sales = await partnerDbService.getSales();
+      if (sales && sales.length > 0) initialSales = sales;
     } catch (e) {
       console.warn('SSR Supabase fetch warning:', e);
     }

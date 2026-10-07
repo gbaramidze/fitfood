@@ -12,6 +12,7 @@ import { AdminPosSalesHistory } from '@/components/admin/AdminPosSalesHistory';
 import { AdminProgramsManager } from '@/components/admin/AdminProgramsManager';
 import { AdminDishesManager } from '@/components/admin/AdminDishesManager';
 import { AdminPointTransfers } from '@/components/admin/AdminPointTransfers';
+import { AdminWriteOffs } from '@/components/admin/AdminWriteOffs';
 import { AdminExpensesPayroll } from '@/components/admin/AdminExpensesPayroll';
 import { AdminPointsSettings } from '@/components/admin/AdminPointsSettings';
 import { AdminDish, AdminExpense, AdminSalary } from '@/types/admin';
@@ -29,6 +30,7 @@ function AdminMainContent() {
       {activeTab === 'programs' && <AdminProgramsManager />}
       {activeTab === 'dishes' && <AdminDishesManager />}
       {activeTab === 'transfers' && <AdminPointTransfers />}
+      {activeTab === 'writeoffs' && <AdminWriteOffs />}
       {activeTab === 'expenses' && <AdminExpensesPayroll />}
       {activeTab === 'points' && <AdminPointsSettings />}
     </main>

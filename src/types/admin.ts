@@ -39,6 +39,7 @@ export interface AdminDish {
   };
   isGeorgianFit: boolean;
   inStockCount?: number;
+  sortOrder?: number;
   createdAt: string;
 }
 

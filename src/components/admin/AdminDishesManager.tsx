@@ -87,7 +87,7 @@ CREATE POLICY "Public Delete Product Images" ON storage.objects
   FOR DELETE USING (bucket_id = 'product-images');`;
 
 export const AdminDishesManager: React.FC = () => {
-  const { dishes, addDish, updateDish, deleteDish, searchQuery, refreshDishes, isLoadingDishes } = useAdmin();
+  const { dishes, addDish, updateDish, deleteDish, setDishesOrder, searchQuery, refreshDishes, isLoadingDishes } = useAdmin();
 
   const [channelFilter, setChannelFilter] = useState<'all' | 'site' | 'pos'>('all');
   const [dayFilter, setDayFilter] = useState<string>('all');
@@ -154,6 +154,84 @@ export const AdminDishesManager: React.FC = () => {
 
   const [lastAddedDishId, setLastAddedDishId] = useState<string | null>(null);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  // Sorting Mode State
+  const [isSortingMode, setIsSortingMode] = useState<boolean>(false);
+  const [sortCategoryFilter, setSortCategoryFilter] = useState<string>('all');
+  const [orderedDishes, setOrderedDishes] = useState<AdminDish[]>(dishes);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isSavingOrder, setIsSavingOrder] = useState<boolean>(false);
+  const [orderSavedToast, setOrderSavedToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOrderedDishes(dishes);
+  }, [dishes]);
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const nextList = [...orderedDishes];
+    const [movedItem] = nextList.splice(draggedIndex, 1);
+    nextList.splice(targetIndex, 0, movedItem);
+
+    setOrderedDishes(nextList);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const moveItem = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= orderedDishes.length) return;
+    const nextList = [...orderedDishes];
+    const [movedItem] = nextList.splice(fromIndex, 1);
+    nextList.splice(toIndex, 0, movedItem);
+    setOrderedDishes(nextList);
+  };
+
+  const handleSaveOrder = async () => {
+    setIsSavingOrder(true);
+    try {
+      await setDishesOrder(orderedDishes);
+      setOrderSavedToast('✓ კერძების თანმიმდევრობა წარმატებით შეინახა!');
+      setTimeout(() => setOrderSavedToast(null), 4000);
+    } catch {
+      alert('შეცდომა შენახვისას');
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  const displaySortedDishes = useMemo(() => {
+    return orderedDishes.filter(d => {
+      if (sortCategoryFilter !== 'all' && d.category !== sortCategoryFilter) return false;
+      return true;
+    });
+  }, [orderedDishes, sortCategoryFilter]);
 
   // Check Storage Status on mount & when opening storage modal
   const checkStorage = async () => {
@@ -705,6 +783,27 @@ export const AdminDishesManager: React.FC = () => {
           >
             ⚡ JSON იმპორტი
           </button>
+          <button
+            onClick={() => setIsSortingMode(!isSortingMode)}
+            className={`admin-btn ${isSortingMode ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              borderColor: isSortingMode ? '#10B981' : '#374151',
+              background: isSortingMode ? '#10B981' : '#1F2937',
+              color: isSortingMode ? '#FFFFFF' : '#F9FAFB',
+              fontWeight: 700,
+            }}
+            title="კერძების თანმიმდევრობის სორტირება (Drag & Drop)"
+          >
+            <span>⇅ სორტირება</span>
+            {isSortingMode && (
+              <span style={{ fontSize: '11px', background: 'rgba(0,0,0,0.25)', padding: '1px 6px', borderRadius: '4px' }}>
+                აქტიურია
+              </span>
+            )}
+          </button>
           <button onClick={openCreateModal} className="admin-btn-primary">
             + ახალი კერძის დამატება
           </button>
@@ -792,281 +891,531 @@ export const AdminDishesManager: React.FC = () => {
         </div>
       )}
 
-      {/* Filter Bars */}
-      <div className="admin-filters-bar">
-        {/* Channel Filter */}
-        <div className="admin-filter-group">
-          <span className="filter-group-label">არხი:</span>
-          <div className="admin-toggle-buttons">
-            <button
-              onClick={() => setChannelFilter('all')}
-              className={`filter-toggle-btn ${channelFilter === 'all' ? 'active' : ''}`}
-            >
-              ყველა ({dishes.length})
-            </button>
-            <button
-              onClick={() => setChannelFilter('site')}
-              className={`filter-toggle-btn ${channelFilter === 'site' ? 'active' : ''}`}
-            >
-              🌐 საიტის რაციონები ({dishes.filter(d => (d.targetChannels || ['site', 'pos']).includes('site')).length})
-            </button>
-            <button
-              onClick={() => setChannelFilter('pos')}
-              className={`filter-toggle-btn ${channelFilter === 'pos' ? 'active' : ''}`}
-            >
-              🏢 წერტილების ვიტრინა ({dishes.filter(d => (d.targetChannels || ['site', 'pos']).includes('pos')).length})
-            </button>
+      {/* Main Dishes View: Sorting Mode OR Normal Card Grid */}
+      {isSortingMode ? (
+        <div className="admin-sort-container">
+          {/* Sorting Toolbar */}
+          <div className="admin-sort-toolbar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleSaveOrder}
+                disabled={isSavingOrder}
+                className="admin-btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px', fontSize: '13.5px' }}
+              >
+                <span>💾</span>
+                <b>{isSavingOrder ? 'ინახება...' : 'თანმიმდევრობის შენახვა'}</b>
+              </button>
+
+              <button
+                onClick={() => setIsSortingMode(false)}
+                className="admin-btn-secondary"
+                style={{ padding: '9px 14px' }}
+              >
+                ← ბარათებზე დაბრუნება
+              </button>
+
+              {orderSavedToast && (
+                <span style={{ color: '#10B981', fontWeight: 700, fontSize: '13px' }}>
+                  {orderSavedToast}
+                </span>
+              )}
+            </div>
+
+            {/* Quick Auto-Sort Presets */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '12px', color: '#9CA3AF', marginRight: '4px' }}>სწრაფი დალაგება:</span>
+              <button
+                onClick={() => {
+                  const sorted = [...orderedDishes].sort((a, b) => (b.retailPrice || 0) - (a.retailPrice || 0));
+                  setOrderedDishes(sorted);
+                }}
+                className="json-template-btn"
+                title="ფასით კლებადობით"
+              >
+                💰 ფასით ↓
+              </button>
+              <button
+                onClick={() => {
+                  const sorted = [...orderedDishes].sort((a, b) => (a.retailPrice || 0) - (b.retailPrice || 0));
+                  setOrderedDishes(sorted);
+                }}
+                className="json-template-btn"
+                title="ფასით ზრდადობით"
+              >
+                💰 ფასით ↑
+              </button>
+              <button
+                onClick={() => {
+                  const sorted = [...orderedDishes].sort((a, b) => {
+                    const nameA = a.name?.ka || a.name?.ru || '';
+                    const nameB = b.name?.ka || b.name?.ru || '';
+                    return nameA.localeCompare(nameB, 'ka');
+                  });
+                  setOrderedDishes(sorted);
+                }}
+                className="json-template-btn"
+                title="ანბანით A-Z"
+              >
+                🔤 ანბანით
+              </button>
+              <button
+                onClick={() => {
+                  const sorted = [...orderedDishes].sort((a, b) => (b.macros?.calories || 0) - (a.macros?.calories || 0));
+                  setOrderedDishes(sorted);
+                }}
+                className="json-template-btn"
+                title="კალორიებით"
+              >
+                🔥 კალორიებით
+              </button>
+              <button
+                onClick={() => setOrderedDishes(dishes)}
+                className="json-template-btn"
+                style={{ color: '#EF4444' }}
+                title="საწყისი წყობის აღდგენა"
+              >
+                🔄 საწყისი
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* Day of Week Filter */}
-        <div className="admin-filter-group">
-          <span className="filter-group-label">კვირის დღე:</span>
-          <select
-            value={dayFilter}
-            onChange={(e) => setDayFilter(e.target.value)}
-            className="admin-select-input"
-          >
-            <option value="all">ყველა დღე</option>
-            {DAYS_MAP.map(d => (
-              <option key={d.id} value={d.id}>{d.label}</option>
-            ))}
-          </select>
-        </div>
+          {/* Search & Category Filter for Sorting View */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '4px 0' }}>
+            {/* Category Pills */}
+            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+              {[
+                { id: 'all', label: 'ყველა' },
+                { id: 'poultry', label: '🍗 ქათამი' },
+                { id: 'meat', label: '🥩 ხორცი' },
+                { id: 'fish', label: '🐟 თევზი' },
+                { id: 'breakfast', label: '🥞 საუზმე' },
+                { id: 'salad', label: '🥗 სალათი' },
+                { id: 'soup', label: '🍲 სუპი' },
+                { id: 'dessert', label: '🧁 დესერტი' },
+                { id: 'drinks', label: '🥤 სასმელი' },
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSortCategoryFilter(cat.id)}
+                  style={{
+                    background: sortCategoryFilter === cat.id ? '#10B981' : '#1F2937',
+                    color: sortCategoryFilter === cat.id ? '#FFFFFF' : '#9CA3AF',
+                    border: `1px solid ${sortCategoryFilter === cat.id ? '#10B981' : '#374151'}`,
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: sortCategoryFilter === cat.id ? 700 : 500,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
 
-        {/* Clear Filters helper */}
-        {(channelFilter !== 'all' || dayFilter !== 'all' || searchQuery.trim()) && (
-          <button
-            onClick={() => {
-              setChannelFilter('all');
-              setDayFilter('all');
-            }}
-            style={{
-              background: '#1F2937',
-              border: '1px solid #374151',
-              color: '#9CA3AF',
-              borderRadius: '8px',
-              padding: '7px 12px',
-              fontSize: '12px',
-              cursor: 'pointer',
-              marginLeft: 'auto',
-            }}
-          >
-            🔄 ფილტრების მოხსნა
-          </button>
-        )}
-      </div>
-
-      {/* Dishes Status Bar */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '6px 4px 14px 4px',
-        fontSize: '12px',
-        color: '#9CA3AF',
-      }}>
-        <div>
-          ბაზაში სულ: <b style={{ color: '#F3F4F6' }}>{dishes.length} კერძი</b>
-          {filteredDishes.length !== dishes.length && (
-            <span> (ნაჩვენებია ფილტრით: <b style={{ color: '#10B981' }}>{filteredDishes.length}</b>)</span>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: '14px' }}>
-          <span>🗄️ Storage ფოტოები: <b style={{ color: '#34D399' }}>{imageStats.storageUrls}</b></span>
-          {imageStats.base64Blobs > 0 && (
-            <span>⚠️ BLOB ფოტოები: <b style={{ color: '#FBBF24' }}>{imageStats.base64Blobs}</b></span>
-          )}
-          <span>🖼️ გალერეა: <b style={{ color: '#9CA3AF' }}>{imageStats.presets}</b></span>
-        </div>
-      </div>
-
-      {/* Empty State */}
-      {filteredDishes.length === 0 ? (
-        <div style={{
-          background: '#111827',
-          border: '1px dashed #374151',
-          borderRadius: '12px',
-          padding: '48px 24px',
-          textAlign: 'center',
-          color: '#9CA3AF',
-          margin: '16px 0',
-        }}>
-          <div style={{ fontSize: '36px', marginBottom: '12px' }}>🔍</div>
-          <div style={{ fontSize: '16px', fontWeight: 600, color: '#E5E7EB', marginBottom: '6px' }}>
-            არჩეული ფილტრით კერძი ვერ მოიძებნა
+            <div style={{ fontSize: '12.5px', color: '#9CA3AF' }}>
+              <span>სულ: <b>{orderedDishes.length} კერძი</b></span>
+              <span style={{ marginLeft: '8px', opacity: 0.7 }}>• გადაათრიეთ მაუსით (Drag & Drop) ან ისრებით</span>
+            </div>
           </div>
-          <p style={{ fontSize: '13px', color: '#6B7280', maxWidth: '400px', margin: '0 auto 16px' }}>
-            შეამოწმეთ კვირის დღის, არხის ან ძებნის ფილტრი.
-          </p>
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-            <button
-              onClick={() => {
-                setChannelFilter('all');
-                setDayFilter('all');
-              }}
-              className="admin-btn-secondary"
-            >
-              🔄 ყველა კერძის ჩვენება ({dishes.length})
-            </button>
-            <button onClick={openCreateModal} className="admin-btn-primary">
-              + ახალი კერძის დამატება
-            </button>
+
+          {/* Sortable Rows List */}
+          <div className="admin-sort-list">
+            {displaySortedDishes.map((dish) => {
+              const originalIndex = orderedDishes.findIndex(d => d.id === dish.id);
+              const isDraggingThis = draggedIndex === originalIndex;
+              const isDragOver = dragOverIndex === originalIndex;
+              const dishName = dish.name?.ka || dish.name?.ru || dish.name?.en || 'კერძი';
+              const subName = dish.name?.ru || dish.name?.en || '';
+              const catLabel = CATEGORY_OPTIONS.find(c => c.id === dish.category)?.label || dish.category;
+
+              return (
+                <div
+                  key={dish.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, originalIndex)}
+                  onDragOver={(e) => handleDragOver(e, originalIndex)}
+                  onDrop={(e) => handleDrop(e, originalIndex)}
+                  onDragEnd={handleDragEnd}
+                  className={`admin-sort-row ${isDraggingThis ? 'is-dragging' : ''} ${isDragOver ? 'drag-over-top' : ''}`}
+                >
+                  {/* Grip handle */}
+                  <div className="admin-sort-handle" title="გადაათრიეთ ადგილის შესაცვლელად">
+                    ⋮⋮
+                  </div>
+
+                  {/* Position Index */}
+                  <div className="admin-sort-idx">
+                    #{originalIndex + 1}
+                  </div>
+
+                  {/* Thumbnail */}
+                  <div className="admin-sort-thumb">
+                    <LazyProductImage
+                      productId={dish.id}
+                      src={dish.image}
+                      alt={dishName}
+                      sizes="44px"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+
+                  {/* Dish Info */}
+                  <div className="admin-sort-info">
+                    <div className="admin-sort-title">
+                      {dishName}
+                      {subName && subName !== dishName && (
+                        <span style={{ fontSize: '12px', fontWeight: 400, color: '#9CA3AF', marginLeft: '8px' }}>
+                          ({subName})
+                        </span>
+                      )}
+                    </div>
+                    <div className="admin-sort-meta">
+                      <span className="table-badge badge-blue" style={{ fontSize: '10.5px' }}>{catLabel}</span>
+                      <span>{dish.macros?.calories || 0} კკალ</span>
+                      <span>•</span>
+                      <span>{dish.macros?.weightGrams || 0} გრ</span>
+                      {dish.day && (
+                        <>
+                          <span>•</span>
+                          <span style={{ color: '#60A5FA' }}>{DAYS_MAP.find(d => d.id === dish.day)?.label || dish.day}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Retail Price */}
+                  <div className="admin-sort-price">
+                    {(dish.retailPrice || 0).toFixed(0)} ₾
+                  </div>
+
+                  {/* Move Controls */}
+                  <div className="admin-sort-actions">
+                    <button
+                      type="button"
+                      onClick={() => moveItem(originalIndex, 0)}
+                      disabled={originalIndex === 0}
+                      className="admin-sort-btn"
+                      title="თავში გადატანა"
+                    >
+                      ⤒
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveItem(originalIndex, originalIndex - 1)}
+                      disabled={originalIndex === 0}
+                      className="admin-sort-btn"
+                      title="ზემოთ აწევა"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveItem(originalIndex, originalIndex + 1)}
+                      disabled={originalIndex === orderedDishes.length - 1}
+                      className="admin-sort-btn"
+                      title="ქვემოთ ჩამოწევა"
+                    >
+                      ▼
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveItem(originalIndex, orderedDishes.length - 1)}
+                      disabled={originalIndex === orderedDishes.length - 1}
+                      className="admin-sort-btn"
+                      title="ბოლოში გადატანა"
+                    >
+                      ⤓
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (
-        /* Dishes Grid */
-        <div className="admin-dishes-grid">
-          {filteredDishes.map((dish) => {
-            const dayName = DAYS_MAP.find(d => d.id === dish.day)?.label || 'ორშაბათი';
-            const margin = (dish.retailPrice || 0) - (dish.costPrice || 0);
-            const isJustAdded = dish.id === lastAddedDishId;
-            const isStorageImage = dish.image?.includes('supabase.co/storage');
-
-            return (
-              <div 
-                key={dish.id} 
-                className="admin-dish-card"
-                style={isJustAdded ? {
-                  borderColor: '#10B981',
-                  boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.4), 0 8px 24px rgba(16, 185, 129, 0.2)',
-                  transition: 'all 0.3s ease',
-                } : undefined}
-              >
-                <div className="admin-dish-image-wrapper">
-                  <LazyProductImage
-                    productId={dish.id}
-                    src={dish.image}
-                    alt={dish.name?.ka || dish.name?.ru || 'კერძი'}
-                    sizes="(max-width: 768px) 100vw, 350px"
-                  />
-                  <div className="admin-dish-badges-overlay">
-                    {isJustAdded && (
-                      <span style={{
-                        background: '#10B981',
-                        color: '#064E3B',
-                        fontWeight: 800,
-                        fontSize: '11px',
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                      }}>
-                        ✨ ახალი
-                      </span>
-                    )}
-                    {isStorageImage && (
-                      <span style={{
-                        background: 'rgba(16, 185, 129, 0.9)',
-                        color: '#FFFFFF',
-                        fontWeight: 700,
-                        fontSize: '10px',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                      }} title="ფოტო ინახება Supabase Storage-ში">
-                        ☁️ Storage
-                      </span>
-                    )}
-                    {(!dish.targetChannels || dish.targetChannels.includes('site')) && <span className="channel-badge badge-site">🌐 საიტი</span>}
-                    {(!dish.targetChannels || dish.targetChannels.includes('pos')) && <span className="channel-badge badge-pos">🏢 დარბაზი</span>}
-                  </div>
-                  <div className="admin-dish-cooking-badge">
-                    📅 {dayName}
-                  </div>
-                </div>
-
-                <div className="admin-dish-body">
-                  <div className="admin-dish-header-row">
-                    <span className="dish-category-label">
-                      {dish.mealType === 'breakfast' ? 'საუზმე' :
-                       dish.mealType === 'lunch' ? 'სადილი' :
-                       dish.mealType === 'snack' ? 'სამხარი' :
-                       dish.mealType === 'dinner' ? 'ვახშამი' : 'დესერტი'}
-                    </span>
-                    <span className="dish-weight">{dish.macros?.weightGrams || 300} გრამი</span>
-                  </div>
-
-                  <h3 className="admin-dish-title">{dish.name?.ka || dish.name?.ru || dish.name?.en || 'კერძი'}</h3>
-
-                  {/* KBJU Strip */}
-                  <div className="admin-kbju-strip">
-                    <div className="kbju-box cal">
-                      <span className="kbju-num">{dish.macros?.calories || 0}</span>
-                      <span className="kbju-lbl">კკალ</span>
-                    </div>
-                    <div className="kbju-box p">
-                      <span className="kbju-num">{dish.macros?.protein || 0}გ</span>
-                      <span className="kbju-lbl">ცილა</span>
-                    </div>
-                    <div className="kbju-box f">
-                      <span className="kbju-num">{dish.macros?.fat || 0}გ</span>
-                      <span className="kbju-lbl">ცხიმი</span>
-                    </div>
-                    <div className="kbju-box c">
-                      <span className="kbju-num">{dish.macros?.carbs || 0}გ</span>
-                      <span className="kbju-lbl">ნახშ</span>
-                    </div>
-                  </div>
-
-                  {/* Price and Margin */}
-                  <div className="admin-dish-finance-row">
-                    <div className="price-item">
-                      <span className="price-label">თვითღირებულება:</span>
-                      <span className="price-cost">{(dish.costPrice || 0).toFixed(1)} ₾</span>
-                    </div>
-                    <div className="price-item">
-                      <span className="price-label">გასაყიდი:</span>
-                      <span className="price-retail">{(dish.retailPrice || 0).toFixed(1)} ₾</span>
-                    </div>
-                    <div className="margin-item">
-                      <span className="margin-pill">+{margin.toFixed(1)} ₾</span>
-                    </div>
-                  </div>
-
-                  {/* Ingredients Recipe Preview */}
-                  {dish.ingredients && ((dish.ingredients.ka && dish.ingredients.ka.length > 0) || (dish.ingredients.ru && dish.ingredients.ru.length > 0)) && (
-                    <div style={{ fontSize: '11.5px', color: '#9CA3AF', margin: '8px 0', background: '#0D131F', padding: '6px 10px', borderRadius: '6px', border: '1px solid #1F2937' }}>
-                      <div style={{ fontWeight: 600, color: '#E5E7EB', marginBottom: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>🥗 შემადგენლობა:</span>
-                        <span style={{ fontSize: '10px', color: '#10B981', background: 'rgba(16, 185, 129, 0.12)', padding: '1px 6px', borderRadius: '4px' }}>
-                          {dish.ingredients.ka?.length || dish.ingredients.ru?.length || 0} ინგრედიენტი
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#94A3B8', lineHeight: '1.4' }}>
-                        {(dish.ingredients.ka?.length ? dish.ingredients.ka : dish.ingredients.ru || []).slice(0, 3).join(', ')}
-                        {((dish.ingredients.ka?.length || dish.ingredients.ru?.length || 0) > 3) ? ' ...' : ''}
-                      </div>
-                    </div>
-                  )}
-
-                  {dish.allergens && dish.allergens.length > 0 && (
-                    <div className="admin-dish-allergens">
-                      {dish.allergens.map(a => (
-                        <span key={a} className="allergen-tag">{a}</span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="admin-dish-actions">
-                    <button onClick={() => openEditModal(dish)} className="btn-dish-edit">
-                      ✏️ რედაქტირება
-                    </button>
-                    <button 
-                      onClick={async () => {
-                        if (confirm(`წაიშალოს კერძი «${dish.name.ka}» ბაზიდან?`)) {
-                          await deleteDish(dish.id);
-                        }
-                      }} 
-                      className="btn-dish-delete"
-                      title="კერძის წაშლა"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
+        <>
+          {/* Filter Bars */}
+          <div className="admin-filters-bar">
+            {/* Channel Filter */}
+            <div className="admin-filter-group">
+              <span className="filter-group-label">არხი:</span>
+              <div className="admin-toggle-buttons">
+                <button
+                  onClick={() => setChannelFilter('all')}
+                  className={`filter-toggle-btn ${channelFilter === 'all' ? 'active' : ''}`}
+                >
+                  ყველა ({dishes.length})
+                </button>
+                <button
+                  onClick={() => setChannelFilter('site')}
+                  className={`filter-toggle-btn ${channelFilter === 'site' ? 'active' : ''}`}
+                >
+                  🌐 საიტის რაციონები ({dishes.filter(d => (d.targetChannels || ['site', 'pos']).includes('site')).length})
+                </button>
+                <button
+                  onClick={() => setChannelFilter('pos')}
+                  className={`filter-toggle-btn ${channelFilter === 'pos' ? 'active' : ''}`}
+                >
+                  🏢 წერტილების ვიტრინა ({dishes.filter(d => (d.targetChannels || ['site', 'pos']).includes('pos')).length})
+                </button>
               </div>
-            );
-          })}
-        </div>
+            </div>
+
+            {/* Day of Week Filter */}
+            <div className="admin-filter-group">
+              <span className="filter-group-label">კვირის დღე:</span>
+              <select
+                value={dayFilter}
+                onChange={(e) => setDayFilter(e.target.value)}
+                className="admin-select-input"
+              >
+                <option value="all">ყველა დღე</option>
+                {DAYS_MAP.map(d => (
+                  <option key={d.id} value={d.id}>{d.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Clear Filters helper */}
+            {(channelFilter !== 'all' || dayFilter !== 'all' || searchQuery.trim()) && (
+              <button
+                onClick={() => {
+                  setChannelFilter('all');
+                  setDayFilter('all');
+                }}
+                style={{
+                  background: '#1F2937',
+                  border: '1px solid #374151',
+                  color: '#9CA3AF',
+                  borderRadius: '8px',
+                  padding: '7px 12px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  marginLeft: 'auto',
+                }}
+              >
+                🔄 ფილტრების მოხსნა
+              </button>
+            )}
+          </div>
+
+          {/* Dishes Status Bar */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '6px 4px 14px 4px',
+            fontSize: '12px',
+            color: '#9CA3AF',
+          }}>
+            <div>
+              ბაზაში სულ: <b style={{ color: '#F3F4F6' }}>{dishes.length} კერძი</b>
+              {filteredDishes.length !== dishes.length && (
+                <span> (ნაჩვენებია ფილტრით: <b style={{ color: '#10B981' }}>{filteredDishes.length}</b>)</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '14px' }}>
+              <span>🗄️ Storage ფოტოები: <b style={{ color: '#34D399' }}>{imageStats.storageUrls}</b></span>
+              {imageStats.base64Blobs > 0 && (
+                <span>⚠️ BLOB ფოტოები: <b style={{ color: '#FBBF24' }}>{imageStats.base64Blobs}</b></span>
+              )}
+              <span>🖼️ გალერეა: <b style={{ color: '#9CA3AF' }}>{imageStats.presets}</b></span>
+            </div>
+          </div>
+
+          {/* Empty State */}
+          {filteredDishes.length === 0 ? (
+            <div style={{
+              background: '#111827',
+              border: '1px dashed #374151',
+              borderRadius: '12px',
+              padding: '48px 24px',
+              textAlign: 'center',
+              color: '#9CA3AF',
+              margin: '16px 0',
+            }}>
+              <div style={{ fontSize: '36px', marginBottom: '12px' }}>🔍</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: '#E5E7EB', marginBottom: '6px' }}>
+                არჩეული ფილტრით კერძი ვერ მოიძებნა
+              </div>
+              <p style={{ fontSize: '13px', color: '#6B7280', maxWidth: '400px', margin: '0 auto 16px' }}>
+                შეამოწმეთ კვირის დღის, არხის ან ძებნის ფილტრი.
+              </p>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                <button
+                  onClick={() => {
+                    setChannelFilter('all');
+                    setDayFilter('all');
+                  }}
+                  className="admin-btn-secondary"
+                >
+                  🔄 ყველა კერძის ჩვენება ({dishes.length})
+                </button>
+                <button onClick={openCreateModal} className="admin-btn-primary">
+                  + ახალი კერძის დამატება
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Dishes Grid */
+            <div className="admin-dishes-grid">
+              {filteredDishes.map((dish) => {
+                const dayName = DAYS_MAP.find(d => d.id === dish.day)?.label || 'ორშაბათი';
+                const margin = (dish.retailPrice || 0) - (dish.costPrice || 0);
+                const isJustAdded = dish.id === lastAddedDishId;
+                const isStorageImage = dish.image?.includes('supabase.co/storage');
+
+                return (
+                  <div 
+                    key={dish.id} 
+                    className="admin-dish-card"
+                    style={isJustAdded ? {
+                      borderColor: '#10B981',
+                      boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.4), 0 8px 24px rgba(16, 185, 129, 0.2)',
+                      transition: 'all 0.3s ease',
+                    } : undefined}
+                  >
+                    <div className="admin-dish-image-wrapper">
+                      <LazyProductImage
+                        productId={dish.id}
+                        src={dish.image}
+                        alt={dish.name?.ka || dish.name?.ru || 'კერძი'}
+                        sizes="(max-width: 768px) 100vw, 350px"
+                      />
+                      <div className="admin-dish-badges-overlay">
+                        {isJustAdded && (
+                          <span style={{
+                            background: '#10B981',
+                            color: '#064E3B',
+                            fontWeight: 800,
+                            fontSize: '11px',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                          }}>
+                            ✨ ახალი
+                          </span>
+                        )}
+                        {isStorageImage && (
+                          <span style={{
+                            background: 'rgba(16, 185, 129, 0.9)',
+                            color: '#FFFFFF',
+                            fontWeight: 700,
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                          }} title="ფოტო ინახება Supabase Storage-ში">
+                            ☁️ Storage
+                          </span>
+                        )}
+                        {(!dish.targetChannels || dish.targetChannels.includes('site')) && <span className="channel-badge badge-site">🌐 საიტი</span>}
+                        {(!dish.targetChannels || dish.targetChannels.includes('pos')) && <span className="channel-badge badge-pos">🏢 დარბაზი</span>}
+                      </div>
+                      <div className="admin-dish-cooking-badge">
+                        📅 {dayName}
+                      </div>
+                    </div>
+
+                    <div className="admin-dish-body">
+                      <div className="admin-dish-header-row">
+                        <span className="dish-category-label">
+                          {dish.mealType === 'breakfast' ? 'საუზმე' :
+                           dish.mealType === 'lunch' ? 'სადილი' :
+                           dish.mealType === 'snack' ? 'სამხარი' :
+                           dish.mealType === 'dinner' ? 'ვახშამი' : 'დესერტი'}
+                        </span>
+                        <span className="dish-weight">{dish.macros?.weightGrams || 300} გრამი</span>
+                      </div>
+
+                      <h3 className="admin-dish-title">{dish.name?.ka || dish.name?.ru || dish.name?.en || 'კერძი'}</h3>
+
+                      {/* KBJU Strip */}
+                      <div className="admin-kbju-strip">
+                        <div className="kbju-box cal">
+                          <span className="kbju-num">{dish.macros?.calories || 0}</span>
+                          <span className="kbju-lbl">კკალ</span>
+                        </div>
+                        <div className="kbju-box p">
+                          <span className="kbju-num">{dish.macros?.protein || 0}გ</span>
+                          <span className="kbju-lbl">ცილა</span>
+                        </div>
+                        <div className="kbju-box f">
+                          <span className="kbju-num">{dish.macros?.fat || 0}გ</span>
+                          <span className="kbju-lbl">ცხიმი</span>
+                        </div>
+                        <div className="kbju-box c">
+                          <span className="kbju-num">{dish.macros?.carbs || 0}გ</span>
+                          <span className="kbju-lbl">ნახშ</span>
+                        </div>
+                      </div>
+
+                      {/* Price and Margin */}
+                      <div className="admin-dish-finance-row">
+                        <div className="price-item">
+                          <span className="price-label">თვითღირებულება:</span>
+                          <span className="price-cost">{(dish.costPrice || 0).toFixed(1)} ₾</span>
+                        </div>
+                        <div className="price-item">
+                          <span className="price-label">გასაყიდი:</span>
+                          <span className="price-retail">{(dish.retailPrice || 0).toFixed(1)} ₾</span>
+                        </div>
+                        <div className="margin-item">
+                          <span className="margin-pill">+{margin.toFixed(1)} ₾</span>
+                        </div>
+                      </div>
+
+                      {/* Ingredients Recipe Preview */}
+                      {dish.ingredients && ((dish.ingredients.ka && dish.ingredients.ka.length > 0) || (dish.ingredients.ru && dish.ingredients.ru.length > 0)) && (
+                        <div style={{ fontSize: '11.5px', color: '#9CA3AF', margin: '8px 0', background: '#0D131F', padding: '6px 10px', borderRadius: '6px', border: '1px solid #1F2937' }}>
+                          <div style={{ fontWeight: 600, color: '#E5E7EB', marginBottom: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>🥗 შემადგენლობა:</span>
+                            <span style={{ fontSize: '10px', color: '#10B981', background: 'rgba(16, 185, 129, 0.12)', padding: '1px 6px', borderRadius: '4px' }}>
+                              {dish.ingredients.ka?.length || dish.ingredients.ru?.length || 0} ინგრედიენტი
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#94A3B8', lineHeight: '1.4' }}>
+                            {(dish.ingredients.ka?.length ? dish.ingredients.ka : dish.ingredients.ru || []).slice(0, 3).join(', ')}
+                            {((dish.ingredients.ka?.length || dish.ingredients.ru?.length || 0) > 3) ? ' ...' : ''}
+                          </div>
+                        </div>
+                      )}
+
+                      {dish.allergens && dish.allergens.length > 0 && (
+                        <div className="admin-dish-allergens">
+                          {dish.allergens.map(a => (
+                            <span key={a} className="allergen-tag">{a}</span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="admin-dish-actions">
+                        <button onClick={() => openEditModal(dish)} className="btn-dish-edit">
+                          ✏️ რედაქტირება
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            if (confirm(`წაიშალოს კერძი «${dish.name.ka}» ბაზიდან?`)) {
+                              await deleteDish(dish.id);
+                            }
+                          }} 
+                          className="btn-dish-delete"
+                          title="კერძის წაშლა"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* Modal: Supabase Storage Manager & BLOB Migration */}
