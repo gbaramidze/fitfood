@@ -4,6 +4,7 @@ import {
   formatSaleNotification, 
   formatLeadNotification,
   getTodayStatsMessage,
+  getYesterdayStatsMessage,
   getMonthStatsMessage,
   handleTelegramCommand
 } from '@/lib/telegram';
@@ -26,9 +27,11 @@ export async function POST(req: NextRequest) {
       messageText = formatSaleNotification(data);
     } else if (type === 'lead') {
       messageText = formatLeadNotification(data);
-    } else if (type === 'stats' || type === 'today') {
+    } else if (type === 'stats' || type === 'today' || type === 'dges') {
       messageText = await getTodayStatsMessage();
-    } else if (type === 'month') {
+    } else if (type === 'yesterday' || type === 'gushin') {
+      messageText = await getYesterdayStatsMessage();
+    } else if (type === 'month' || type === 'tve') {
       messageText = await getMonthStatsMessage();
     } else {
       return NextResponse.json({ success: false, error: 'Invalid notification type' }, { status: 400 });

@@ -157,6 +157,218 @@ ${lead.comment ? `💬 <b>Пожелания / ალერგია:</b> <i>${l
 `.trim();
 }
 
+export function isYesterdayTbilisi(dateStr: string): boolean {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tbilisi',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const todayTbilisiStr = fmt.format(now);
+  const [y, m, d] = todayTbilisiStr.split('-').map(Number);
+  const yesterdayDate = new Date(Date.UTC(y, m - 1, d - 1));
+  const yesterdayTbilisiStr = yesterdayDate.toISOString().slice(0, 10);
+  return fmt.format(date) === yesterdayTbilisiStr;
+}
+
+export function getYesterdayDateStrKa(): string {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tbilisi',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const todayTbilisiStr = fmt.format(now);
+  const [y, m, d] = todayTbilisiStr.split('-').map(Number);
+  const yesterdayDate = new Date(Date.UTC(y, m - 1, d - 1));
+  const yYear = yesterdayDate.getUTCFullYear();
+  const yMonth = String(yesterdayDate.getUTCMonth() + 1).padStart(2, '0');
+  const yDay = String(yesterdayDate.getUTCDate()).padStart(2, '0');
+  return `${yDay}.${yMonth}.${yYear}`;
+}
+
+async function getPointNamesMap(): Promise<Record<string, string>> {
+  const pointNames: Record<string, string> = {
+    'point-mega-gym': 'Mega Gym',
+    'point-xxl': 'XXL',
+    'point-fitness-academy': 'Fitness Academy',
+  };
+
+  try {
+    const { data: points } = await supabase.from('partner_points').select('id, name');
+    if (points) {
+      points.forEach((p: any) => {
+        let name = p.id;
+        if (typeof p.name === 'object' && p.name) {
+          name = p.name.ka || p.name.ru || p.name.en || p.id;
+        } else if (typeof p.name === 'string') {
+          name = p.name;
+        }
+        pointNames[p.id] = name;
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to fetch partner points for telegram stats:', err);
+  }
+
+  return pointNames;
+}
+
+function buildPeriodStatsMessage(
+  title: string,
+  emptyMessage: string,
+  filteredSales: any[],
+  pointNames: Record<string, string>,
+  options?: { isMonth?: boolean }
+): string {
+  if (filteredSales.length === 0) {
+    return `
+${title}
+━━━━━━━━━━━━━━━━━━━━━
+${emptyMessage}
+`.trim();
+  }
+
+  const gymMap: Record<string, {
+    name: string;
+    grossTotal: number;
+    cardTotal: number;
+    cashTotal: number;
+    discountTotal: number;
+    freeTotal: number;
+    units: number;
+    count: number;
+  }> = {};
+  const productMap: Record<string, { quantity: number; netTotal: number; grossTotal: number }> = {};
+  let grossTotal = 0;
+  let cardTotal = 0;
+  let cashTotal = 0;
+  let discountTotal = 0;
+  let freeTotal = 0;
+  let totalUnits = 0;
+
+  filteredSales.forEach(s => {
+    const orig = Number(s.original_amount || s.total_amount || 0);
+    const disc = Number(s.discount_amount || 0);
+    const total = Number(s.total_amount || 0);
+    const isFree = s.payment_method === 'free' || s.discount_type === 'free';
+    const ptId = s.point_id || 'unknown';
+    const ptName = pointNames[ptId] || ptId;
+
+    if (!gymMap[ptId]) {
+      gymMap[ptId] = {
+        name: ptName,
+        grossTotal: 0,
+        cardTotal: 0,
+        cashTotal: 0,
+        discountTotal: 0,
+        freeTotal: 0,
+        units: 0,
+        count: 0
+      };
+    }
+
+    const gym = gymMap[ptId];
+    gym.grossTotal += orig;
+    gym.count += 1;
+    grossTotal += orig;
+
+    if (isFree) {
+      freeTotal += orig;
+      gym.freeTotal += orig;
+    } else {
+      if (disc > 0 && s.discount_type !== 'free') {
+        discountTotal += disc;
+        gym.discountTotal += disc;
+      }
+      if (s.payment_method === 'card') {
+        cardTotal += total;
+        gym.cardTotal += total;
+      } else if (s.payment_method === 'cash') {
+        cashTotal += total;
+        gym.cashTotal += total;
+      } else if (s.payment_method === 'split' && s.split_details) {
+        const cAmt = Number(s.split_details.cardAmount || 0);
+        const kAmt = Number(s.split_details.cashAmount || 0);
+        cardTotal += cAmt;
+        gym.cardTotal += cAmt;
+        cashTotal += kAmt;
+        gym.cashTotal += kAmt;
+      }
+    }
+
+    const discountRatio = (orig > 0 && disc > 0) ? (disc / orig) : 0;
+
+    (s.items || []).forEach((it: any) => {
+      const name = it.productName || 'უცნობი';
+      const qty = Number(it.quantity || 1);
+      const itGross = Number(it.totalPrice !== undefined ? it.totalPrice : (it.pricePerUnit * qty));
+      const itNet = isFree ? 0 : Math.max(0, itGross * (1 - discountRatio));
+
+      totalUnits += qty;
+      gym.units += qty;
+
+      if (!productMap[name]) {
+        productMap[name] = { quantity: 0, netTotal: 0, grossTotal: 0 };
+      }
+      productMap[name].quantity += qty;
+      productMap[name].netTotal += itNet;
+      productMap[name].grossTotal += itGross;
+    });
+  });
+
+  // Filter out gyms with 0 sales ("нулевой не показывай") and sort by grossTotal descending
+  const sortedGyms = Object.values(gymMap)
+    .filter(g => g.units > 0 || g.grossTotal > 0)
+    .sort((a, b) => b.grossTotal - a.grossTotal);
+
+  const gymsList = sortedGyms.map(gym => {
+    const payParts = [];
+    if (gym.cardTotal > 0) payParts.push(`💳 ${formatAmount(gym.cardTotal)} ₾`);
+    if (gym.cashTotal > 0) payParts.push(`💵 ${formatAmount(gym.cashTotal)} ₾`);
+    if (gym.discountTotal > 0) payParts.push(`🎁 ${formatAmount(gym.discountTotal)} ₾`);
+    if (gym.freeTotal > 0) payParts.push(`🆓 ${formatAmount(gym.freeTotal)} ₾`);
+    const payStr = payParts.length > 0 ? ` (${payParts.join(' / ')})` : '';
+    return `   🏋️‍♂️ <b>${gym.name}:</b> ${formatAmount(gym.grossTotal)} ₾${payStr} — ${gym.units} ც.`;
+  }).join('\n');
+
+  const sortedProducts = Object.entries(productMap).sort(
+    (a, b) => b[1].quantity - a[1].quantity || b[1].netTotal - a[1].netTotal
+  );
+
+  const positionsList = sortedProducts.map(([name, data], idx) => 
+    `   ${idx + 1}. ${name} - ${data.quantity} ც = ${formatAmount(data.netTotal)} ₾`
+  ).join('\n');
+
+  const productsSectionHeader = options?.isMonth ? '📦 <b>ტოპ პროდუქტები:</b>' : '📦 <b>პოზიციები:</b>';
+
+  const monthCountSummary = options?.isMonth ? `
+━━━━━━━━━━━━━━━━━━━━━
+🧾 <b>ჩეკების რაოდენობა:</b> ${filteredSales.length}
+📦 <b>სულ გაყიდული:</b> ${totalUnits} ც.` : '';
+
+  return `
+${title}
+━━━━━━━━━━━━━━━━━━━━━
+${productsSectionHeader}
+${positionsList}
+
+━━━━━━━━━━━━━━━━━━━━━
+🏢 <b>დარბაზების მიხედვით:</b>
+${gymsList}
+${monthCountSummary}
+━━━━━━━━━━━━━━━━━━━━━
+💰 <b>სულ ჯამი:</b> ${formatAmount(grossTotal)} ₾
+💳 <b>ტერმინალი:</b> ${formatAmount(cardTotal)} ₾
+💵 <b>ნაღდი:</b> ${formatAmount(cashTotal)} ₾
+🎁 <b>ფასდაკლება:</b> ${formatAmount(discountTotal)} ₾
+🆓 <b>უფასო:</b> ${formatAmount(freeTotal)} ₾
+`.trim();
+}
+
 export async function getTodayStatsMessage(): Promise<string> {
   const now = new Date();
   const todayDateStr = now.toLocaleDateString('ka-GE', {
@@ -171,6 +383,7 @@ export async function getTodayStatsMessage(): Promise<string> {
   }
 
   try {
+    const pointNames = await getPointNamesMap();
     const { data: sales, error } = await supabase
       .from('partner_sales')
       .select('*')
@@ -182,86 +395,47 @@ export async function getTodayStatsMessage(): Promise<string> {
 
     const todaySales = sales.filter(s => s.status !== 'refunded' && isTodayTbilisi(s.created_at));
 
-    if (todaySales.length === 0) {
-      return `
-📊 <b>დღევანდელი გაყიდვები (${todayDateStr})</b>
-━━━━━━━━━━━━━━━━━━━━━
-დღეს გაყიდვები ჯერ არ არის.
-`.trim();
-    }
-
-    const productMap: Record<string, { quantity: number; netTotal: number; grossTotal: number }> = {};
-    let grossTotal = 0;
-    let cardTotal = 0;
-    let cashTotal = 0;
-    let discountTotal = 0;
-    let freeTotal = 0;
-
-    todaySales.forEach(s => {
-      const orig = Number(s.original_amount || s.total_amount || 0);
-      const disc = Number(s.discount_amount || 0);
-      const total = Number(s.total_amount || 0);
-      const isFree = s.payment_method === 'free' || s.discount_type === 'free';
-
-      grossTotal += orig;
-
-      if (isFree) {
-        freeTotal += orig;
-      } else {
-        if (disc > 0 && s.discount_type !== 'free') {
-          discountTotal += disc;
-        }
-        if (s.payment_method === 'card') {
-          cardTotal += total;
-        } else if (s.payment_method === 'cash') {
-          cashTotal += total;
-        } else if (s.payment_method === 'split' && s.split_details) {
-          cardTotal += Number(s.split_details.cardAmount || 0);
-          cashTotal += Number(s.split_details.cashAmount || 0);
-        }
-      }
-
-      const discountRatio = (orig > 0 && disc > 0) ? (disc / orig) : 0;
-
-      (s.items || []).forEach((it: any) => {
-        const name = it.productName || 'უცნობი';
-        const qty = Number(it.quantity || 1);
-        const itGross = Number(it.totalPrice !== undefined ? it.totalPrice : (it.pricePerUnit * qty));
-        const itNet = isFree ? 0 : Math.max(0, itGross * (1 - discountRatio));
-
-        if (!productMap[name]) {
-          productMap[name] = { quantity: 0, netTotal: 0, grossTotal: 0 };
-        }
-        productMap[name].quantity += qty;
-        productMap[name].netTotal += itNet;
-        productMap[name].grossTotal += itGross;
-      });
-    });
-
-    const sorted = Object.entries(productMap).sort(
-      (a, b) => b[1].quantity - a[1].quantity || b[1].netTotal - a[1].netTotal
+    return buildPeriodStatsMessage(
+      `📊 <b>დღევანდელი გაყიდვები (${todayDateStr})</b>`,
+      'დღეს გაყიდვები ჯერ არ არის.',
+      todaySales,
+      pointNames
     );
-
-    const positionsList = sorted.map(([name, data], idx) => 
-      `   ${idx + 1}. ${name} - ${data.quantity} ც = ${formatAmount(data.netTotal)} ₾`
-    ).join('\n');
-
-    return `
-📊 <b>დღევანდელი გაყიდვები (${todayDateStr})</b>
-━━━━━━━━━━━━━━━━━━━━━
-📦 <b>პოზიციები:</b>
-${positionsList}
-
-━━━━━━━━━━━━━━━━━━━━━
-💰 <b>სულ ჯამი:</b> ${formatAmount(grossTotal)} ₾
-💳 <b>ტერმინალი:</b> ${formatAmount(cardTotal)} ₾
-💵 <b>ნაღდი:</b> ${formatAmount(cashTotal)} ₾
-🎁 <b>ფასდაკლება:</b> ${formatAmount(discountTotal)} ₾
-🆓 <b>უფასო:</b> ${formatAmount(freeTotal)} ₾
-`.trim();
   } catch (err: any) {
     console.error('Error calculating today stats:', err);
     return `📊 შეცდომა სტატისტიკის დათვლისას: ${err.message || 'უცნობი'}`;
+  }
+}
+
+export async function getYesterdayStatsMessage(): Promise<string> {
+  const yesterdayDateStr = getYesterdayDateStrKa();
+
+  if (!isSupabaseConfigured) {
+    return `⏪ <b>გუშინდელი გაყიდვები (${yesterdayDateStr})</b>\n\nმონაცემთა ბაზა მიუწვდომელია.`;
+  }
+
+  try {
+    const pointNames = await getPointNamesMap();
+    const { data: sales, error } = await supabase
+      .from('partner_sales')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error || !sales) {
+      return `⏪ <b>გუშინდელი გაყიდვები (${yesterdayDateStr})</b>\n\nმონაცემების ჩატვირთვა ვერ მოხერხდა.`;
+    }
+
+    const yesterdaySales = sales.filter(s => s.status !== 'refunded' && isYesterdayTbilisi(s.created_at));
+
+    return buildPeriodStatsMessage(
+      `⏪ <b>გუშინდელი გაყიდვები (${yesterdayDateStr})</b>`,
+      'გუშინ გაყიდვები არ ყოფილა.',
+      yesterdaySales,
+      pointNames
+    );
+  } catch (err: any) {
+    console.error('Error calculating yesterday stats:', err);
+    return `⏪ შეცდომა გუშინდელი სტატისტიკის დათვლისას: ${err.message || 'უცნობი'}`;
   }
 }
 
@@ -276,6 +450,7 @@ export async function getMonthStatsMessage(): Promise<string> {
   }
 
   try {
+    const pointNames = await getPointNamesMap();
     const { data: sales, error } = await supabase
       .from('partner_sales')
       .select('*')
@@ -287,89 +462,13 @@ export async function getMonthStatsMessage(): Promise<string> {
 
     const monthSales = sales.filter(s => s.status !== 'refunded' && isCurrentMonthTbilisi(s.created_at));
 
-    if (monthSales.length === 0) {
-      return `
-🏆 <b>მიმდინარე თვის გაყიდვები (${monthNameKa} ${year})</b>
-━━━━━━━━━━━━━━━━━━━━━
-მიმდინარე თვეში გაყიდვები ჯერ არ არის.
-`.trim();
-    }
-
-    const productMap: Record<string, { quantity: number; netTotal: number; grossTotal: number }> = {};
-    let grossTotal = 0;
-    let cardTotal = 0;
-    let cashTotal = 0;
-    let discountTotal = 0;
-    let freeTotal = 0;
-    let totalUnits = 0;
-
-    monthSales.forEach(s => {
-      const orig = Number(s.original_amount || s.total_amount || 0);
-      const disc = Number(s.discount_amount || 0);
-      const total = Number(s.total_amount || 0);
-      const isFree = s.payment_method === 'free' || s.discount_type === 'free';
-
-      grossTotal += orig;
-
-      if (isFree) {
-        freeTotal += orig;
-      } else {
-        if (disc > 0 && s.discount_type !== 'free') {
-          discountTotal += disc;
-        }
-        if (s.payment_method === 'card') {
-          cardTotal += total;
-        } else if (s.payment_method === 'cash') {
-          cashTotal += total;
-        } else if (s.payment_method === 'split' && s.split_details) {
-          cardTotal += Number(s.split_details.cardAmount || 0);
-          cashTotal += Number(s.split_details.cashAmount || 0);
-        }
-      }
-
-      const discountRatio = (orig > 0 && disc > 0) ? (disc / orig) : 0;
-
-      (s.items || []).forEach((it: any) => {
-        const name = it.productName || 'უცნობი';
-        const qty = Number(it.quantity || 1);
-        const itGross = Number(it.totalPrice !== undefined ? it.totalPrice : (it.pricePerUnit * qty));
-        const itNet = isFree ? 0 : Math.max(0, itGross * (1 - discountRatio));
-
-        totalUnits += qty;
-
-        if (!productMap[name]) {
-          productMap[name] = { quantity: 0, netTotal: 0, grossTotal: 0 };
-        }
-        productMap[name].quantity += qty;
-        productMap[name].netTotal += itNet;
-        productMap[name].grossTotal += itGross;
-      });
-    });
-
-    const sorted = Object.entries(productMap).sort(
-      (a, b) => b[1].quantity - a[1].quantity || b[1].netTotal - a[1].netTotal
+    return buildPeriodStatsMessage(
+      `🏆 <b>მიმდინარე თვის გაყიდვები (${monthNameKa} ${year})</b>`,
+      'მიმდინარე თვეში გაყიდვები ჯერ არ არის.',
+      monthSales,
+      pointNames,
+      { isMonth: true }
     );
-
-    const positionsList = sorted.map(([name, data], idx) => 
-      `   ${idx + 1}. ${name} - ${data.quantity} ც = ${formatAmount(data.netTotal)} ₾`
-    ).join('\n');
-
-    return `
-🏆 <b>მიმდინარე თვის გაყიდვები (${monthNameKa} ${year})</b>
-━━━━━━━━━━━━━━━━━━━━━
-📦 <b>ტოპ პროდუქტები:</b>
-${positionsList}
-
-━━━━━━━━━━━━━━━━━━━━━
-🧾 <b>ჩეკების რაოდენობა:</b> ${monthSales.length}
-📦 <b>სულ გაყიდული:</b> ${totalUnits} ც.
-━━━━━━━━━━━━━━━━━━━━━
-💰 <b>სულ ჯამი:</b> ${formatAmount(grossTotal)} ₾
-💳 <b>ტერმინალი:</b> ${formatAmount(cardTotal)} ₾
-💵 <b>ნაღდი:</b> ${formatAmount(cashTotal)} ₾
-🎁 <b>ფასდაკლება:</b> ${formatAmount(discountTotal)} ₾
-🆓 <b>უფასო:</b> ${formatAmount(freeTotal)} ₾
-`.trim();
   } catch (err: any) {
     console.error('Error calculating month stats:', err);
     return `🏆 შეცდომა თვის სტატისტიკის დათვლისას: ${err.message || 'უცნობი'}`;
@@ -379,18 +478,39 @@ ${positionsList}
 export async function handleTelegramCommand(commandText: string, chatId?: string | number) {
   const cleanCmd = commandText.trim().toLowerCase().split('@')[0];
 
-  if (cleanCmd === '/stats' || cleanCmd === '/today' || cleanCmd === '/dges' || cleanCmd === '/დღეს') {
+  if (
+    cleanCmd === '/stats' || 
+    cleanCmd === '/today' || 
+    cleanCmd === '/dges' || 
+    cleanCmd === '/დღეს' || 
+    cleanCmd === '/сегодня'
+  ) {
     const msg = await getTodayStatsMessage();
     return await sendTelegramMessage(msg, chatId);
-  } else if (cleanCmd === '/month' || cleanCmd === '/tve' || cleanCmd === '/თვე') {
+  } else if (
+    cleanCmd === '/yesterday' || 
+    cleanCmd === '/gushin' || 
+    cleanCmd === '/გუშინ' || 
+    cleanCmd === '/вчера' || 
+    cleanCmd === '/yday'
+  ) {
+    const msg = await getYesterdayStatsMessage();
+    return await sendTelegramMessage(msg, chatId);
+  } else if (
+    cleanCmd === '/month' || 
+    cleanCmd === '/tve' || 
+    cleanCmd === '/თვე' || 
+    cleanCmd === '/месяц'
+  ) {
     const msg = await getMonthStatsMessage();
     return await sendTelegramMessage(msg, chatId);
   } else if (cleanCmd === '/start' || cleanCmd === '/help') {
     const helpMsg = `
 🤖 <b>Fitness Food Bot — ხელმისაწვდომი ბრძანებები:</b>
 ━━━━━━━━━━━━━━━━━━━━━
-📊 /stats — დღევანდელი გაყიდვების სტატისტიკა და პოზიციები
-🏆 /month — მიმდინარე თვის გაყიდვები და TOP პროდუქტები
+📊 /stats — დღევანდელი გაყიდვები დარბაზების მიხედვით
+⏪ /yesterday — გუშინდელი გაყიდვები დარბაზების მიხედვით
+🏆 /month — მიმდინარე თვის გაყიდვები და დარბაზების სტატისტიკა
 ❓ /help — დახმარება
 `.trim();
     return await sendTelegramMessage(helpMsg, chatId);
@@ -398,3 +518,4 @@ export async function handleTelegramCommand(commandText: string, chatId?: string
 
   return { success: false, error: 'Unknown command' };
 }
+

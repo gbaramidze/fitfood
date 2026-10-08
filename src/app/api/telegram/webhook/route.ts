@@ -29,6 +29,7 @@ export async function GET() {
     description: 'Fitness Food Telegram Webhook Endpoint',
     endpoints: {
       stats: '/stats',
+      yesterday: '/yesterday',
       month: '/month',
     }
   });

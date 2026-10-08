@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "telegram:bot": "node scripts/telegram_bot.mjs"
+    "telegram:bot": "node scripts/telegram_bot.mjs",
+    "telegram:webhook": "node scripts/set_webhook.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
