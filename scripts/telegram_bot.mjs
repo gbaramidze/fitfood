@@ -137,7 +137,6 @@ ${emptyMessage}
   }
 
   const gymMap = {};
-  const productMap = {};
   let grossTotal = 0;
   let cardTotal = 0;
   let cashTotal = 0;
@@ -162,7 +161,8 @@ ${emptyMessage}
         discountTotal: 0,
         freeTotal: 0,
         units: 0,
-        count: 0
+        count: 0,
+        products: {}
       };
     }
 
@@ -206,61 +206,64 @@ ${emptyMessage}
       totalUnits += qty;
       gym.units += qty;
 
-      if (!productMap[name]) {
-        productMap[name] = { quantity: 0, netTotal: 0, grossTotal: 0 };
+      if (!gym.products[name]) {
+        gym.products[name] = { quantity: 0, netTotal: 0, grossTotal: 0 };
       }
-      productMap[name].quantity += qty;
-      productMap[name].netTotal += itNet;
-      productMap[name].grossTotal += itGross;
+      gym.products[name].quantity += qty;
+      gym.products[name].netTotal += itNet;
+      gym.products[name].grossTotal += itGross;
     });
   });
 
-  // Filter out gyms with 0 sales ("нулевой не показывай") and sort by grossTotal descending
+  // Filter out gyms with 0 sales and sort by grossTotal descending
   const sortedGyms = Object.values(gymMap)
     .filter(g => g.units > 0 || g.grossTotal > 0)
     .sort((a, b) => b.grossTotal - a.grossTotal);
 
-  const gymsList = sortedGyms.map(gym => {
+  if (sortedGyms.length === 0) {
+    return `
+${title}
+━━━━━━━━━━━━━━━━━━━━━
+${emptyMessage}
+`.trim();
+  }
+
+  const gymsSections = sortedGyms.map(gym => {
+    const sortedProducts = Object.entries(gym.products).sort(
+      (a, b) => b[1].quantity - a[1].quantity || b[1].netTotal - a[1].netTotal
+    );
+
+    const positionsList = sortedProducts.map(([name, data], idx) => 
+      `   ${idx + 1}. ${name} - ${data.quantity} ც. = ${formatAmount(data.netTotal)} ₾`
+    ).join('\n');
+
     const payParts = [];
     if (gym.cardTotal > 0) payParts.push(`💳 ${formatAmount(gym.cardTotal)} ₾`);
     if (gym.cashTotal > 0) payParts.push(`💵 ${formatAmount(gym.cashTotal)} ₾`);
     if (gym.discountTotal > 0) payParts.push(`🎁 ${formatAmount(gym.discountTotal)} ₾`);
     if (gym.freeTotal > 0) payParts.push(`🆓 ${formatAmount(gym.freeTotal)} ₾`);
     const payStr = payParts.length > 0 ? ` (${payParts.join(' / ')})` : '';
-    return `   🏋️‍♂️ <b>${gym.name}:</b> ${formatAmount(gym.grossTotal)} ₾${payStr} — ${gym.units} ც.`;
-  }).join('\n');
 
-  const sortedProducts = Object.entries(productMap).sort(
-    (a, b) => b[1].quantity - a[1].quantity || b[1].netTotal - a[1].netTotal
-  );
-
-  const positionsList = sortedProducts.map(([name, data], idx) => 
-    `   ${idx + 1}. ${name} - ${data.quantity} ც = ${formatAmount(data.netTotal)} ₾`
-  ).join('\n');
-
-  const productsSectionHeader = options?.isMonth ? '📦 <b>ტოპ პროდუქტები:</b>' : '📦 <b>პოზიციები:</b>';
-
-  const monthCountSummary = options?.isMonth ? `
-━━━━━━━━━━━━━━━━━━━━━
-🧾 <b>ჩეკების რაოდენობა:</b> ${filteredSales.length}
-📦 <b>სულ გაყიდული:</b> ${totalUnits} ც.` : '';
+    return `🏋️‍♂️ <b>${gym.name}</b>
+📦 <b>პოზიციები:</b>
+${positionsList}
+📊 <b>ჯამი:</b> ${formatAmount(gym.grossTotal)} ₾${payStr} — ${gym.units} ც.`;
+  }).join('\n\n━━━━━━━━━━━━━━━━━━━━━\n\n');
 
   return `
 ${title}
 ━━━━━━━━━━━━━━━━━━━━━
-${productsSectionHeader}
-${positionsList}
+
+${gymsSections}
 
 ━━━━━━━━━━━━━━━━━━━━━
-🏢 <b>დარბაზების მიხედვით:</b>
-${gymsList}
-${monthCountSummary}
-━━━━━━━━━━━━━━━━━━━━━
-💰 <b>სულ ჯამი:</b> ${formatAmount(grossTotal)} ₾
+💰 <b>საერთო ჯამი:</b> ${formatAmount(grossTotal)} ₾
 💳 <b>ტერმინალი:</b> ${formatAmount(cardTotal)} ₾
 💵 <b>ნაღდი:</b> ${formatAmount(cashTotal)} ₾
 🎁 <b>ფასდაკლება:</b> ${formatAmount(discountTotal)} ₾
 🆓 <b>უფასო:</b> ${formatAmount(freeTotal)} ₾
+📦 <b>სულ გაყიდული:</b> ${totalUnits} ც.
+🧾 <b>ჩეკების რაოდენობა:</b> ${filteredSales.length}
 `.trim();
 }
 
