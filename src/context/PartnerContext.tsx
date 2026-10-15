@@ -92,7 +92,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [currentPoint, setCurrentPoint] = useState<PartnerPoint | null>(initialPartnerPoints[0]);
   const [currentRole, setCurrentRole] = useState<PartnerRole>('manager');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoaded, setIsLoaded] = useState<boolean>(true);
 
   const loadAllData = async () => {
@@ -110,10 +110,8 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const dbPoints = await partnerDbService.getPoints();
       if (dbPoints && dbPoints.length > 0) {
         setPoints(dbPoints);
-        if (!currentPoint) setCurrentPoint(dbPoints[0]);
       } else {
         setPoints(initialPartnerPoints);
-        if (!currentPoint) setCurrentPoint(initialPartnerPoints[0]);
       }
     } catch (e) {
       console.warn('Supabase points fetch error, using fallback:', e);
@@ -154,6 +152,28 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.warn('Supabase writeoffs fetch error:', e);
     }
   };
+
+  // Restore active session from sessionStorage if available
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const savedAuthStr = sessionStorage.getItem('fitfood_partner_auth');
+        if (savedAuthStr) {
+          const savedAuth = JSON.parse(savedAuthStr);
+          if (savedAuth && savedAuth.pointId && savedAuth.authenticated) {
+            const found = points.find(p => p.id === savedAuth.pointId) || initialPartnerPoints.find(p => p.id === savedAuth.pointId);
+            if (found) {
+              setCurrentPoint(found);
+              setCurrentRole(savedAuth.role || 'cashier');
+              setIsAuthenticated(true);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error restoring partner auth session:', e);
+    }
+  }, [points]);
 
   // Load directly from Supabase on mount & listen to local storage order changes
   useEffect(() => {
@@ -213,47 +233,80 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     pointId: string,
     pin: string
   ): { success: boolean; role?: PartnerRole; message?: string } => {
-    const point = points.find(p => p.id === pointId);
-    if (!point) return { success: false, message: 'Точка не найдена' };
+    const point = points.find(p => p.id === pointId) || initialPartnerPoints.find(p => p.id === pointId);
+    if (!point) return { success: false, message: 'წერტილი ვერ მოიძებნა' };
+
+    let role: PartnerRole | null = null;
 
     if (pin === '0000') {
-      setCurrentPoint(point);
-      setCurrentRole('admin');
-      setIsAuthenticated(true);
-      return { success: true, role: 'admin' as PartnerRole };
+      role = 'admin';
+    } else if (pin === point.managerPin) {
+      role = 'manager';
+    } else if (pin === point.cashierPin) {
+      role = 'cashier';
     }
 
-    if (pin === point.managerPin) {
+    if (role) {
       setCurrentPoint(point);
-      setCurrentRole('manager');
+      setCurrentRole(role);
       setIsAuthenticated(true);
-      return { success: true, role: 'manager' as PartnerRole };
-    }
-
-    if (pin === point.cashierPin) {
-      setCurrentPoint(point);
-      setCurrentRole('cashier');
-      setIsAuthenticated(true);
-      return { success: true, role: 'cashier' as PartnerRole };
+      try {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('fitfood_partner_auth', JSON.stringify({
+            pointId: point.id,
+            role,
+            authenticated: true,
+            timestamp: Date.now()
+          }));
+        }
+      } catch {}
+      return { success: true, role };
     }
 
     return {
       success: false,
-      message: 'Неверный PIN-код (Кассир: 1111, Менеджер: 7777, Офис: 0000)',
+      message: 'არასწორი PIN კოდი',
     };
   };
 
   const switchRole = (role: PartnerRole) => {
     setCurrentRole(role);
+    try {
+      if (typeof window !== 'undefined' && currentPoint) {
+        sessionStorage.setItem('fitfood_partner_auth', JSON.stringify({
+          pointId: currentPoint.id,
+          role,
+          authenticated: true,
+          timestamp: Date.now()
+        }));
+      }
+    } catch {}
   };
 
   const selectPoint = (pointId: string) => {
     const p = points.find(item => item.id === pointId);
-    if (p) setCurrentPoint(p);
+    if (p) {
+      setCurrentPoint(p);
+      try {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('fitfood_partner_auth', JSON.stringify({
+            pointId: p.id,
+            role: currentRole,
+            authenticated: isAuthenticated,
+            timestamp: Date.now()
+          }));
+        }
+      } catch {}
+    }
   };
 
   const logout = () => {
     setIsAuthenticated(false);
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('fitfood_partner_auth');
+      }
+    } catch {}
   };
 
   const getPointStock = (pointId: string, productId: string): number => {

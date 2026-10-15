@@ -3,8 +3,9 @@
 import React, { useState, useMemo } from 'react';
 import { useAdmin } from '@/context/AdminContext';
 import { PartnerPoint } from '@/types/partner';
+import { calculateSaleCookBreakdown } from '@/lib/cookCommissionHelper';
 
-type PeriodType = 'today' | 'yesterday' | 'week' | 'month' | 'all';
+type PeriodType = 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'custom' | 'all';
 
 export const AdminDashboardOverview: React.FC = () => {
   const { 
@@ -29,6 +30,16 @@ export const AdminDashboardOverview: React.FC = () => {
 
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('today');
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+
+  // Default custom range: from 1st day of current month until today
+  const [customStartDate, setCustomStartDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [customEndDate, setCustomEndDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
 
   const GEORGIAN_MONTHS = [
     'იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი',
@@ -71,6 +82,23 @@ export const AdminDashboardOverview: React.FC = () => {
     if (selectedPeriod === 'month') {
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     }
+    if (selectedPeriod === 'last_month') {
+      const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return d.getFullYear() === prevMonthDate.getFullYear() && d.getMonth() === prevMonthDate.getMonth();
+    }
+    if (selectedPeriod === 'custom') {
+      if (customStartDate) {
+        const start = new Date(customStartDate);
+        start.setHours(0, 0, 0, 0);
+        if (d < start) return false;
+      }
+      if (customEndDate) {
+        const end = new Date(customEndDate);
+        end.setHours(23, 59, 59, 999);
+        if (d > end) return false;
+      }
+      return true;
+    }
     return true; // 'all'
   };
 
@@ -93,6 +121,54 @@ export const AdminDashboardOverview: React.FC = () => {
   const periodPosRevenue = useMemo(() => {
     return completedPeriodSales.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0);
   }, [completedPeriodSales]);
+
+  // Gross Nominal Value of POS Sales (without discounts)
+  const periodPosGrossAmount = useMemo(() => {
+    return completedPeriodSales.reduce((sum, s) => {
+      const orig = Number(s.originalAmount) > 0
+        ? Number(s.originalAmount)
+        : (Array.isArray(s.items) && s.items.length > 0
+            ? s.items.reduce((acc, it) => acc + ((Number(it.pricePerUnit) || 16) * (Number(it.quantity) || 1)), 0)
+            : Number(s.totalAmount) || 0);
+      return sum + orig;
+    }, 0);
+  }, [completedPeriodSales]);
+
+  // Total discounts given in POS
+  const periodPosDiscountAmount = useMemo(() => {
+    return completedPeriodSales.reduce((sum, s) => {
+      const orig = Number(s.originalAmount) > 0 ? Number(s.originalAmount) : (Number(s.totalAmount) || 0);
+      const disc = Number(s.discountAmount) > 0 ? Number(s.discountAmount) : Math.max(0, orig - (Number(s.totalAmount) || 0));
+      return sum + disc;
+    }, 0);
+  }, [completedPeriodSales]);
+
+  // Cook's 5% share (calculated strictly from kitchen dishes without coffee/drinks)
+  const periodCookBreakdown = useMemo(() => {
+    let cookGross = 0;
+    let excludedGross = 0;
+    let cookUnits = 0;
+
+    completedPeriodSales.forEach(s => {
+      if (Array.isArray(s.items) && s.items.length > 0) {
+        const bd = calculateSaleCookBreakdown(s.items, dishes);
+        cookGross += bd.cookGross;
+        excludedGross += bd.excludedGross;
+        cookUnits += bd.cookUnits;
+      } else {
+        const orig = Number(s.originalAmount) || Number(s.totalAmount) || 0;
+        cookGross += orig;
+        cookUnits += 1;
+      }
+    });
+
+    return {
+      cookGross,
+      excludedGross,
+      cookUnits,
+      cookCommission: Math.round((cookGross * 0.05) * 100) / 100,
+    };
+  }, [completedPeriodSales, dishes]);
 
   // Portions sold in gyms today / period
   const periodPosUnitsSold = useMemo(() => {
@@ -300,6 +376,18 @@ export const AdminDashboardOverview: React.FC = () => {
               მიმდინარე თვე
             </button>
             <button
+              onClick={() => setSelectedPeriod('last_month')}
+              className={`filter-toggle-btn ${selectedPeriod === 'last_month' ? 'active' : ''}`}
+            >
+              წინა თვე
+            </button>
+            <button
+              onClick={() => setSelectedPeriod('custom')}
+              className={`filter-toggle-btn ${selectedPeriod === 'custom' ? 'active' : ''}`}
+            >
+              📅 პერიოდი (თარიღით)
+            </button>
+            <button
               onClick={() => setSelectedPeriod('all')}
               className={`filter-toggle-btn ${selectedPeriod === 'all' ? 'active' : ''}`}
             >
@@ -308,14 +396,35 @@ export const AdminDashboardOverview: React.FC = () => {
           </div>
         </div>
 
+        {selectedPeriod === 'custom' && (
+          <div className="admin-date-range-container">
+            <span className="admin-date-range-label">დან:</span>
+            <input
+              type="date"
+              value={customStartDate}
+              onChange={(e) => setCustomStartDate(e.target.value)}
+              className="admin-date-input"
+            />
+            <span className="admin-date-range-label">მდე:</span>
+            <input
+              type="date"
+              value={customEndDate}
+              onChange={(e) => setCustomEndDate(e.target.value)}
+              className="admin-date-input"
+            />
+          </div>
+        )}
+
         <div style={{ fontSize: '12px', color: '#9CA3AF' }}>
-          📅 {selectedPeriod === 'today' ? `დღეს: ${todayFormatted}` : `ფილტრი: ${selectedPeriod}`}
+          📅 {selectedPeriod === 'today' ? `დღეს: ${todayFormatted}` : 
+              selectedPeriod === 'custom' ? `დიაპაზონი: ${customStartDate} — ${customEndDate}` : 
+              `ფილტრი: ${selectedPeriod}`}
         </div>
       </div>
 
       {/* KPI Stats Grid for Selected Period */}
       <div className="admin-kpi-grid">
-        {/* 1. Total Revenue Today */}
+        {/* 1. Total Revenue Today / Period */}
         <div className="admin-kpi-card card-revenue">
           <div className="kpi-header">
             <span className="kpi-title">{selectedPeriod === 'today' ? 'დღევანდელი ჯამური გაყიდვები' : 'ჯამური შემოსავალი'}</span>
@@ -325,12 +434,30 @@ export const AdminDashboardOverview: React.FC = () => {
             {periodTotalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₾
           </div>
           <div className="kpi-sub-breakdown">
-            <span>🏢 დარბაზები: <b>{periodPosRevenue.toFixed(2)} ₾</b></span>
+            <span>🏢 დარბაზები: <b>{periodPosRevenue.toFixed(2)} ₾</b> (ნომინალი: {periodPosGrossAmount.toFixed(2)} ₾)</span>
             <span>🌐 საიტი: <b>{periodSiteRevenue.toFixed(2)} ₾</b></span>
           </div>
         </div>
 
-        {/* 2. Gym / POS Sales Today */}
+        {/* 2. COOK'S 5% COMMISSION */}
+        <div className="admin-kpi-card card-cook">
+          <div className="kpi-header">
+            <span className="kpi-title" style={{ color: '#F59E0B' }}>👨‍🍳 მზარეულის 5% (სამზარეულოდან)</span>
+            <span className="kpi-icon">⭐</span>
+          </div>
+          <div className="kpi-value text-amber">
+            {periodCookBreakdown.cookCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₾
+          </div>
+          <div className="kpi-sub-breakdown">
+            <span>🍳 სამზარეულო: <b>{periodCookBreakdown.cookGross.toFixed(2)} ₾</b> ({periodCookBreakdown.cookUnits} ულუფა)</span>
+            <span>☕ ყავა/სასმელი: <b>{periodCookBreakdown.excludedGross.toFixed(2)} ₾</b> (გამორიცხულია)</span>
+          </div>
+          <div className="kpi-footer-note" style={{ color: '#FCD34D' }}>
+            5% სამზარეულოს კერძებიდან (ყავისა და სასმელების გარეშე)
+          </div>
+        </div>
+
+        {/* 3. Gym / POS Sales Today */}
         <div className="admin-kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">დარბაზების გაყიდვები ({selectedPeriod === 'today' ? 'დღეს' : 'პერიოდი'})</span>
@@ -345,7 +472,7 @@ export const AdminDashboardOverview: React.FC = () => {
           </div>
         </div>
 
-        {/* 3. New Website Orders */}
+        {/* 4. New Website Orders */}
         <div className="admin-kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">ახალი განაცხადები (საიტი)</span>
@@ -359,7 +486,7 @@ export const AdminDashboardOverview: React.FC = () => {
           </div>
         </div>
 
-        {/* 4. Active Clients */}
+        {/* 5. Active Clients */}
         <div className="admin-kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">აქტიური კლიენტები</span>
@@ -371,7 +498,7 @@ export const AdminDashboardOverview: React.FC = () => {
           </div>
         </div>
 
-        {/* 5. Sold / Delivered to Clients Today */}
+        {/* 6. Sold / Delivered to Clients Today */}
         <div className="admin-kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">{selectedPeriod === 'today' ? 'დღეს გაცემული ულუფები' : 'სულ გაცემული ულუფები'}</span>
@@ -386,7 +513,7 @@ export const AdminDashboardOverview: React.FC = () => {
           </div>
         </div>
 
-        {/* 6. Food Cost Margin */}
+        {/* 7. Food Cost Margin */}
         <div className="admin-kpi-card card-profit">
           <div className="kpi-header">
             <span className="kpi-title">სუფთა მარჟა (Food Cost-ის შემდეგ)</span>

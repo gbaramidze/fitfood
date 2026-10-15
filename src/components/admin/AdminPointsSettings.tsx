@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useAdmin } from '@/context/AdminContext';
 import { PartnerPoint } from '@/types/partner';
+import { getPointLogo } from '@/data/partnerData';
 
 export const AdminPointsSettings: React.FC = () => {
   const { points, addPoint, updatePoint } = useAdmin();
@@ -84,20 +85,33 @@ export const AdminPointsSettings: React.FC = () => {
 
       {/* Points Grid */}
       <div className="admin-grid-2col">
-        {points.map((pt) => (
-          <div key={pt.id} className="admin-card point-card">
-            <div className="admin-card-header">
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <span style={{ fontSize: '26px' }}>🏋️</span>
-                <div>
-                  <h3 style={{ margin: 0 }}>{pt.name.ka}</h3>
-                  <p style={{ margin: 0, color: '#94A3B8' }}>{pt.address.ka}</p>
+        {points.map((pt) => {
+          const logoUrl = getPointLogo(pt);
+          return (
+            <div key={pt.id} className="admin-card point-card">
+              <div className="admin-card-header">
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <img
+                    src={logoUrl}
+                    alt={pt.name.ka}
+                    style={{
+                      width: '42px',
+                      height: '42px',
+                      borderRadius: '10px',
+                      objectFit: 'cover',
+                      border: '1px solid #374151',
+                      background: '#111827'
+                    }}
+                  />
+                  <div>
+                    <h3 style={{ margin: 0 }}>{pt.name.ka}</h3>
+                    <p style={{ margin: 0, color: '#94A3B8' }}>{pt.address.ka}</p>
+                  </div>
                 </div>
+                <span className="table-badge badge-green">
+                  {pt.status === 'active' ? '● აქტიური' : '○ გამორთული'}
+                </span>
               </div>
-              <span className="table-badge badge-green">
-                {pt.status === 'active' ? '● აქტიური' : '○ გამორთული'}
-              </span>
-            </div>
 
             <div className="point-card-specs">
               <div className="spec-row">
@@ -124,7 +138,8 @@ export const AdminPointsSettings: React.FC = () => {
               </button>
             </div>
           </div>
-        ))}
+        );
+      })}
       </div>
 
       {/* Modal: Edit / Create Point */}

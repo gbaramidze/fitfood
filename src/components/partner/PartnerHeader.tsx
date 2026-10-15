@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePartner } from '@/context/PartnerContext';
+import { getPointLogo } from '@/data/partnerData';
 
 interface PartnerHeaderProps {
   activeTab: string;
@@ -19,13 +20,16 @@ export const PartnerHeader: React.FC<PartnerHeaderProps> = ({
   const {
     currentPoint,
     currentRole,
-    points,
-    selectPoint,
+    logout,
   } = usePartner();
+
+  const logoUrl = getPointLogo(currentPoint);
+  const pointName = currentPoint?.name?.ka || currentPoint?.name?.ru || 'დარბაზი';
+  const pointAddress = currentPoint?.address?.ka || currentPoint?.address?.ru || '';
 
   return (
     <header className="partner-minimal-header">
-      {/* Left: Brand & Point */}
+      {/* Left: Brand & Active Gym Logo Chip */}
       <div className="partner-min-left">
         <Link href="/" className="partner-min-logo">
           <div className="partner-min-logo-img">
@@ -43,29 +47,26 @@ export const PartnerHeader: React.FC<PartnerHeaderProps> = ({
           </div>
         </Link>
 
-        {currentRole === 'cashier' ? (
-          <div className="partner-min-point-locked" title="გაყიდვის წერტილი">
-            <span style={{ fontSize: '13px' }}>📍</span>
-            <span>{currentPoint?.name.ka || currentPoint?.name.ru}</span>
-            <span style={{ fontSize: '11px', color: '#94A3B8', marginLeft: '4px' }}>
-              ({currentPoint?.address.ka || currentPoint?.address.ru})
-            </span>
+        {/* Gym Point Badge with Logo */}
+        <button
+          type="button"
+          onClick={openPinModal}
+          className="partner-active-gym-chip"
+          title="წერტილის შეცვლა / PIN"
+        >
+          <img
+            src={logoUrl}
+            alt={pointName}
+            className="partner-chip-logo"
+          />
+          <div className="partner-chip-info">
+            <span className="partner-chip-name">{pointName}</span>
+            <span className="partner-chip-addr">{pointAddress}</span>
           </div>
-        ) : (
-          <div className="partner-min-point-wrap" title="წერტილის არჩევა">
-            <select
-              value={currentPoint?.id || ''}
-              onChange={e => selectPoint(e.target.value)}
-              className="partner-min-select"
-            >
-              {points.map(p => (
-                <option key={p.id} value={p.id}>
-                  📍 {p.name.ka || p.name.ru} — {p.address.ka || p.address.ru}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+          <span className={`partner-role-pill ${currentRole}`}>
+            {currentRole === 'admin' ? '👑 Admin' : currentRole === 'manager' ? '💼 მენეჯერი' : '🟢 მოლარე'}
+          </span>
+        </button>
       </div>
 
       {/* Center: Georgian Nav Pills */}
@@ -99,7 +100,7 @@ export const PartnerHeader: React.FC<PartnerHeaderProps> = ({
         </button>
       </nav>
 
-      {/* Right: PIN Authentication only */}
+      {/* Right: Actions */}
       <div className="partner-min-right">
         <button
           onClick={openPinModal}
@@ -107,6 +108,13 @@ export const PartnerHeader: React.FC<PartnerHeaderProps> = ({
           title="თანამშრომლის შეცვლა (PIN კოდი)"
         >
           🔑 PIN
+        </button>
+        <button
+          onClick={logout}
+          className="partner-min-logout-btn"
+          title="გასვლა და სხვა დარბაზის არჩევა"
+        >
+          🚪 გასვლა
         </button>
       </div>
     </header>

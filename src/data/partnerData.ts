@@ -14,30 +14,12 @@ export const initialPartnerPoints: PartnerPoint[] = [
       ka: 'კაჩინსკების 5ბ',
       en: '5B Kachinski St',
     },
-    cashierPin: '1111',
+    cashierPin: '1313',
     managerPin: '7777',
     commissionPercent: 0,
     phone: '+995 555 11 22 33',
     status: 'active',
-  },
-  {
-    id: 'point-xxl',
-    name: {
-      ru: 'XXL',
-      ka: 'XXL',
-      en: 'XXL',
-    },
-    city: 'Batumi',
-    address: {
-      ru: 'ул. Качинских 1',
-      ka: 'კაცინსკების 1',
-      en: '1 Kachinski St',
-    },
-    cashierPin: '2222',
-    managerPin: '8888',
-    commissionPercent: 0,
-    phone: '+995 555 22 33 44',
-    status: 'active',
+    logo: '/images/points/mega.jpg',
   },
   {
     id: 'point-fitness-academy',
@@ -52,13 +34,24 @@ export const initialPartnerPoints: PartnerPoint[] = [
       ka: 'ფიროსმანის 18',
       en: '18 Pirosmani St',
     },
-    cashierPin: '3333',
+    cashierPin: '2424',
     managerPin: '9999',
     commissionPercent: 0,
     phone: '+995 555 33 44 55',
     status: 'active',
+    logo: '/images/points/fitness-academy.png',
   },
 ];
+
+export function getPointLogo(point?: PartnerPoint | null | { id?: string; name?: any; logo?: string }): string {
+  if (!point) return '/images/logo-white.png';
+  if (point.logo) return point.logo;
+  const id = (point.id || '').toLowerCase();
+  const nameStr = (typeof point.name === 'object' ? `${point.name?.ka || ''} ${point.name?.ru || ''} ${point.name?.en || ''}` : String(point.name || '')).toLowerCase();
+  if (id.includes('mega') || nameStr.includes('mega')) return '/images/points/mega.jpg';
+  if (id.includes('fitness') || id.includes('academy') || nameStr.includes('academy') || nameStr.includes('fitness')) return '/images/points/fitness-academy.png';
+  return '/images/logo-white.png';
+}
 
 // NO MOCK PRODUCTS: Loaded 100% dynamically from Supabase database table `partner_products`
 export const partnerProducts: PartnerProduct[] = [];
@@ -66,7 +59,6 @@ export const partnerProducts: PartnerProduct[] = [];
 // Initial Stock levels per point (clean / zeroed)
 export const initialStocks: Record<string, Record<string, number>> = {
   'point-mega-gym': {},
-  'point-xxl': {},
   'point-fitness-academy': {},
 };
 

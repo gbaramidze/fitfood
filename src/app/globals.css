@@ -5135,6 +5135,97 @@ img {
   border: 1px solid #282E3A;
 }
 
+.partner-active-gym-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #141820;
+  border: 1px solid #282E3A;
+  padding: 4px 12px 4px 6px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.partner-active-gym-chip:hover {
+  background: #1A202C;
+  border-color: #3B82F6;
+}
+
+.partner-chip-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #374151;
+  background: #0B0E14;
+}
+
+.partner-chip-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.partner-chip-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.partner-chip-addr {
+  font-size: 10.5px;
+  color: #94A3B8;
+}
+
+.partner-role-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 6px;
+  margin-left: 4px;
+}
+
+.partner-role-pill.cashier {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.partner-role-pill.manager {
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.partner-role-pill.admin {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.partner-min-logout-btn {
+  background: #181B22;
+  border: 1px solid #282E3A;
+  color: #94A3B8;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.partner-min-logout-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #F87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
 .partner-min-point-locked {
   display: flex;
   align-items: center;
@@ -6413,109 +6504,411 @@ img {
   color: #FFFFFF;
 }
 
-/* PIN Modal */
-.pos-min-pin-card {
-  background: #111318;
-  border: 1px solid #282E3A;
-  border-radius: 18px;
+/* Fullscreen Partner Auth & PIN Modal */
+.partner-auth-fullscreen-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #090B0E;
+}
+
+.pos-modal-overlay.fullscreen-auth {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 20%, #161D2A 0%, #080A0E 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 9999;
+}
+
+.partner-auth-card {
+  background: #11141A;
+  border: 1px solid #232936;
+  border-radius: 24px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: modalFadeIn 0.25s ease-out;
+  overflow: hidden;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.partner-auth-card.step-select-mode {
   width: 100%;
-  max-width: 320px;
-  padding: 24px;
+  max-width: 680px;
+  padding: 32px 28px;
+}
+
+.partner-auth-card.step-pin-mode {
+  width: 100%;
+  max-width: 310px;
+  padding: 16px 18px;
+  max-height: 94vh;
+  overflow-y: auto;
+}
+
+.partner-auth-topbar {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.step-pin-mode .partner-auth-topbar {
+  margin-bottom: 10px;
+}
+
+.partner-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo-glow {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #10B981, #059669);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
+}
+
+.step-pin-mode .brand-logo-glow {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.brand-title {
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 900;
+  color: #FFFFFF;
+  letter-spacing: 0.05em;
+  display: block;
+  line-height: 1.1;
+}
+
+.step-pin-mode .brand-title {
+  font-size: 13px;
+}
+
+.brand-subtitle {
+  font-size: 9px;
+  font-weight: 800;
+  color: #10B981;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.step-pin-mode .brand-subtitle {
+  font-size: 8.5px;
+}
+
+.partner-auth-close-btn {
+  background: #181B22;
+  border: 1px solid #282E3A;
+  color: #94A3B8;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.partner-auth-close-btn:hover {
+  background: #282E3A;
+  color: #FFFFFF;
+}
+
+/* STEP 1: Point selection grid */
+.partner-auth-step-point {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-.pos-min-pin-card .modal-head {
+.partner-auth-heading {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.partner-auth-heading h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #FFFFFF;
+  margin: 0 0 6px 0;
+}
+
+.partner-auth-heading p {
+  font-size: 13px;
+  color: #94A3B8;
+  margin: 0;
+}
+
+.partner-points-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .partner-points-selection-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+.partner-point-select-card {
+  background: #161A22;
+  border: 2px solid #242B38;
+  border-radius: 18px;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.partner-point-select-card:hover {
+  transform: translateY(-4px);
+  background: #1C222D;
+  border-color: #10B981;
+  box-shadow: 0 12px 30px rgba(16, 185, 129, 0.2);
+}
+
+.partner-point-select-card.is-selected {
+  border-color: #10B981;
+  background: #182228;
+}
+
+.partner-point-logo-container {
+  width: 110px;
+  height: 110px;
+  border-radius: 20px;
+  background: #0B0E14;
+  border: 2px solid #282E3A;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  transition: transform 0.25s ease;
+}
+
+.partner-point-select-card:hover .partner-point-logo-container {
+  transform: scale(1.06);
+  border-color: #10B981;
+}
+
+.partner-point-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.partner-point-details {
+  margin-bottom: 16px;
+}
+
+.partner-point-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: #FFFFFF;
+  margin: 0 0 6px 0;
+}
+
+.partner-point-addr {
+  font-size: 12.5px;
+  color: #94A3B8;
+  display: block;
+}
+
+.partner-point-enter-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 10px;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.partner-point-select-card:hover .partner-point-enter-badge {
+  background: #10B981;
+  color: #061A12;
+  border-color: #10B981;
+}
+
+/* STEP 2: PIN Entry View (Compact) */
+.partner-auth-step-pin {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.partner-selected-gym-bar {
   width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  background: #161A22;
+  border: 1px solid #282E3A;
+  border-radius: 10px;
+  padding: 5px 8px;
+  margin-bottom: 8px;
 }
 
-.pos-min-pin-card .modal-head h3 {
-  font-size: 15px;
+.partner-back-to-points-btn {
+  background: transparent;
+  border: none;
+  color: #38BDF8;
+  font-size: 11px;
   font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.partner-back-to-points-btn:hover {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.partner-current-gym-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gym-chip-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  object-fit: cover;
+  border: 1px solid #374151;
+}
+
+.gym-chip-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  text-align: right;
+}
+
+.gym-chip-text b {
+  font-size: 11.5px;
   color: #FFFFFF;
 }
 
-.pos-min-pin-card .modal-head .close-btn {
-  background: transparent;
-  border: none;
-  color: #64748B;
-  cursor: pointer;
+.gym-chip-text span {
+  font-size: 9px;
+  color: #94A3B8;
 }
 
-.pin-point-select-wrap {
-  width: 100%;
-  margin-bottom: 16px;
+.partner-pin-prompt {
+  text-align: center;
+  margin-bottom: 8px;
 }
 
-.pin-point-select-wrap select {
-  width: 100%;
+.partner-pin-prompt h3 {
+  font-size: 14px;
+  font-weight: 800;
+  color: #FFFFFF;
+  margin: 0;
+}
+
+.partner-pin-prompt p {
+  font-size: 10px;
+  color: #94A3B8;
+  margin: 2px 0 0 0;
 }
 
 .min-pin-dots {
   display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .min-pin-dot {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
-  border: 1px solid #475569;
+  border: 2px solid #475569;
   transition: all 0.15s ease;
 }
 
 .min-pin-dot.active {
-  background: #FFFFFF;
-  border-color: #FFFFFF;
+  background: #10B981;
+  border-color: #10B981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
 
 .min-pin-dot.error {
   border-color: #EF4444;
   background: #EF4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
 }
 
 .min-pin-error {
   color: #F87171;
-  font-size: 11.5px;
-  margin-bottom: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 8px;
   text-align: center;
 }
 
 .min-pin-keypad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .min-key {
-  aspect-ratio: 1;
+  height: 42px;
   background: #181B22;
   border: 1px solid #282E3A;
   color: #FFFFFF;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
-  border-radius: 10px;
+  border-radius: 9px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.1s ease;
+  transition: all 0.1s ease;
 }
 
 .min-key:hover {
   background: #282E3A;
+  border-color: #475569;
 }
 
 .min-key:active {
-  transform: scale(0.96);
+  transform: scale(0.95);
+  background: #333C4D;
 }
 
 .min-key.clear {
@@ -6523,29 +6916,56 @@ img {
   color: #94A3B8;
 }
 
-.min-pin-shortcuts {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 4px;
-  border-top: 1px solid #1F242E;
-  padding-top: 12px;
-}
-
-.min-pin-shortcuts button {
-  background: #181B22;
-  border: 1px solid #282E3A;
+.min-key.backspace {
+  font-size: 14px;
   color: #94A3B8;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 5px 2px;
-  border-radius: 6px;
-  cursor: pointer;
 }
 
-.min-pin-shortcuts button:hover {
+.shake-anim {
+  animation: pinShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes pinShake {
+  10%, 90% { transform: translate3d(-2px, 0, 0); }
+  20%, 80% { transform: translate3d(4px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+  40%, 60% { transform: translate3d(6px, 0, 0); }
+}
+
+.partner-pin-hints-box {
+  width: 100%;
+  background: #14171E;
+  border: 1px solid #232936;
+  border-radius: 9px;
+  padding: 7px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  color: #94A3B8;
+}
+
+.hint-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hint-code {
+  font-family: monospace;
+  font-size: 11px;
   color: #FFFFFF;
-  border-color: #475569;
+  background: #1C212B;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.hint-code.admin {
+  color: #10B981;
+}
+
+.hint-code.manager {
+  color: #F59E0B;
 }
 
 /* Footer */

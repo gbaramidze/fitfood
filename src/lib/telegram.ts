@@ -193,7 +193,6 @@ export function getYesterdayDateStrKa(): string {
 async function getPointNamesMap(): Promise<Record<string, string>> {
   const pointNames: Record<string, string> = {
     'point-mega-gym': 'Mega Gym',
-    'point-xxl': 'XXL',
     'point-fitness-academy': 'Fitness Academy',
   };
 

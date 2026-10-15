@@ -3,13 +3,16 @@
 import React, { useState } from 'react';
 import { useAdmin } from '@/context/AdminContext';
 import { AdminExpense, AdminSalary, ExpenseCategory, EmployeeRole } from '@/types/admin';
+import { calculateSaleCookBreakdown } from '@/lib/cookCommissionHelper';
 
 export const AdminExpensesPayroll: React.FC = () => {
   const { 
     expenses, 
     salaries, 
-    totalExpenses,
-    totalPayroll,
+    totalExpenses, 
+    totalPayroll, 
+    sales, 
+    dishes,
     addExpense, 
     deleteExpense, 
     addSalaryRecord, 
@@ -21,6 +24,8 @@ export const AdminExpensesPayroll: React.FC = () => {
   const [subTab, setSubTab] = useState<'expenses' | 'salaries'>('expenses');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
+  const [cookCalcPeriod, setCookCalcPeriod] = useState<'month' | 'last_month' | 'all'>('month');
+  const [cookBonusNotice, setCookBonusNotice] = useState<string | null>(null);
 
   // Expense form
   const [expTitle, setExpTitle] = useState('');
@@ -37,6 +42,76 @@ export const AdminExpensesPayroll: React.FC = () => {
   const [salMonthly, setSalMonthly] = useState<number>(1800);
   const [salShifts, setSalShifts] = useState<number>(24);
   const [salBonus, setSalBonus] = useState<number>(0);
+
+  // Cook 5% bonus calculation from sales (kitchen dishes only, excluding coffee & drinks)
+  const cookSalesStats = React.useMemo(() => {
+    const now = new Date();
+    const filtered = sales.filter((s) => {
+      if (s.status !== 'completed') return false;
+      if (!s.createdAt) return false;
+      const d = new Date(s.createdAt);
+      if (isNaN(d.getTime())) return false;
+
+      if (cookCalcPeriod === 'month') {
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      }
+      if (cookCalcPeriod === 'last_month') {
+        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return d.getFullYear() === prevMonth.getFullYear() && d.getMonth() === prevMonth.getMonth();
+      }
+      return true; // 'all'
+    });
+
+    let totalGross = 0;
+    let netAmount = 0;
+    let cookGross = 0;
+    let excludedGross = 0;
+    let cookUnits = 0;
+    let excludedUnits = 0;
+
+    filtered.forEach(s => {
+      const orig = Number(s.originalAmount) > 0
+        ? Number(s.originalAmount)
+        : (Array.isArray(s.items) && s.items.length > 0
+            ? s.items.reduce((sum, it) => sum + ((Number(it.pricePerUnit) || 16) * (Number(it.quantity) || 1)), 0)
+            : Number(s.totalAmount) || 0);
+
+      totalGross += orig;
+      netAmount += Number(s.totalAmount) || 0;
+
+      if (Array.isArray(s.items) && s.items.length > 0) {
+        const bd = calculateSaleCookBreakdown(s.items, dishes);
+        cookGross += bd.cookGross;
+        excludedGross += bd.excludedGross;
+        cookUnits += bd.cookUnits;
+        excludedUnits += bd.excludedUnits;
+      } else {
+        cookGross += orig;
+        cookUnits += 1;
+      }
+    });
+
+    const cookCommission = Math.round((cookGross * 0.05) * 100) / 100;
+
+    return {
+      totalGross,
+      netAmount,
+      cookGross,
+      excludedGross,
+      cookUnits,
+      excludedUnits,
+      receiptsCount: filtered.length,
+      cookCommission,
+    };
+  }, [sales, dishes, cookCalcPeriod]);
+
+  // Apply cook 5% to cook's salary record
+  const handleApplyCookBonusToSalary = (salaryId: string, currentBonus: number) => {
+    const updatedBonus = currentBonus + cookSalesStats.cookCommission;
+    updateSalaryRecord(salaryId, { bonus: updatedBonus });
+    setCookBonusNotice(`+${cookSalesStats.cookCommission.toFixed(2)} ₾ წარმატებით დაემატა მზარეულის ბონუსში!`);
+    setTimeout(() => setCookBonusNotice(null), 4000);
+  };
 
   const handleCreateExpense = (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,21 +275,112 @@ export const AdminExpensesPayroll: React.FC = () => {
 
       {/* Salaries Table */}
       {subTab === 'salaries' && (
-        <div className="admin-card">
-          <div className="admin-table-responsive">
-            <table className="admin-data-table">
-              <thead>
-                <tr>
-                  <th>თანამშრომელი / პოზიცია</th>
-                  <th>ტელეფონი</th>
-                  <th>განაკვეთი (GEL)</th>
-                  <th>ცვლა</th>
-                  <th>ბონუსი</th>
-                  <th>გასაცემი თანხა</th>
-                  <th>სტატუსი</th>
-                  <th>მოქმედება</th>
-                </tr>
-              </thead>
+        <>
+          {cookBonusNotice && (
+            <div className="admin-alert-banner alert-success" style={{ marginBottom: '16px' }}>
+              <span>✓ {cookBonusNotice}</span>
+            </div>
+          )}
+
+          {/* Cook 5% Auto Calculator Widget */}
+          <div className="admin-card" style={{ marginBottom: '18px', borderLeft: '3px solid #F59E0B', background: '#162032' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '15px', color: '#F9FAFB', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>👨‍🍳</span> მზარეულის 5%-იანი ბონუსის კალკულატორი (სრული ფასიდან)
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#9CA3AF' }}>
+                  ავტომატური ანგარიში POS გაყიდვებიდან. მზარეული იღებს 5%-ს კერძის სრული ნომინალით (ფასდაკლების მიუხედავად)
+                </p>
+              </div>
+
+              <div className="admin-toggle-buttons">
+                <button
+                  type="button"
+                  onClick={() => setCookCalcPeriod('month')}
+                  className={`filter-toggle-btn ${cookCalcPeriod === 'month' ? 'active' : ''}`}
+                >
+                  მიმდინარე თვე
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCookCalcPeriod('last_month')}
+                  className={`filter-toggle-btn ${cookCalcPeriod === 'last_month' ? 'active' : ''}`}
+                >
+                  წინა თვე
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCookCalcPeriod('all')}
+                  className={`filter-toggle-btn ${cookCalcPeriod === 'all' ? 'active' : ''}`}
+                >
+                  ყველა დრო
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+              <div style={{ background: '#111827', padding: '10px 14px', borderRadius: '8px', border: '1px solid #1F2937' }}>
+                <span style={{ fontSize: '11px', color: '#9CA3AF', textTransform: 'uppercase', display: 'block' }}>სამზარეულოს კერძები (ნომინალი)</span>
+                <b style={{ fontSize: '18px', color: '#A78BFA' }}>{cookSalesStats.cookGross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₾</b>
+                <span style={{ fontSize: '11px', color: '#6B7280', display: 'block' }}>{cookSalesStats.cookUnits} ულუფა (მზარეულისთვის)</span>
+              </div>
+
+              <div style={{ background: '#111827', padding: '10px 14px', borderRadius: '8px', border: '1px solid #1F2937' }}>
+                <span style={{ fontSize: '11px', color: '#9CA3AF', textTransform: 'uppercase', display: 'block' }}>☕ ყავა & სასმელები (გამორიცხული)</span>
+                <b style={{ fontSize: '18px', color: '#94A3B8' }}>{cookSalesStats.excludedGross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₾</b>
+                <span style={{ fontSize: '11px', color: '#EF4444', display: 'block' }}>არ ერიცხება მზარეულს</span>
+              </div>
+
+              <div style={{ background: '#111827', padding: '10px 14px', borderRadius: '8px', border: '1px solid #1F2937' }}>
+                <span style={{ fontSize: '11px', color: '#9CA3AF', textTransform: 'uppercase', display: 'block' }}>ფაქტობრივი სალარო</span>
+                <b style={{ fontSize: '18px', color: '#10B981' }}>{cookSalesStats.netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₾</b>
+                <span style={{ fontSize: '11px', color: '#6B7280', display: 'block' }}>{cookSalesStats.receiptsCount} ჩეკში</span>
+              </div>
+
+              <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                <span style={{ fontSize: '11px', color: '#F59E0B', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>მზარეულის კუთვნილი 5%</span>
+                <b style={{ fontSize: '20px', color: '#F59E0B' }}>+{cookSalesStats.cookCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₾</b>
+                <span style={{ fontSize: '11px', color: '#FCD34D', display: 'block' }}>5% სამზარეულოს კერძებიდან</span>
+              </div>
+            </div>
+
+            {/* Quick apply to cook salary */}
+            {salaries.some(s => s.role === 'cook' || s.role === 'chef') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingTop: '10px', borderTop: '1px solid #1F2937', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '12px', color: '#9CA3AF' }}>მზარეულზე ბონუსის დარიცხვა:</span>
+                {salaries
+                  .filter(s => s.role === 'cook' || s.role === 'chef')
+                  .map(cook => (
+                    <button
+                      key={cook.id}
+                      type="button"
+                      onClick={() => handleApplyCookBonusToSalary(cook.id, cook.bonus || 0)}
+                      className="admin-mini-btn btn-success"
+                      style={{ padding: '6px 12px', fontSize: '12px' }}
+                    >
+                      ✨ დარიცხვა «{cook.employeeName}»-ს (+{cookSalesStats.cookCommission.toFixed(2)} ₾)
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          <div className="admin-card">
+            <div className="admin-table-responsive">
+              <table className="admin-data-table">
+                <thead>
+                  <tr>
+                    <th>თანამშრომელი / პოზიცია</th>
+                    <th>ტელეფონი</th>
+                    <th>განაკვეთი (GEL)</th>
+                    <th>ცვლა</th>
+                    <th>ბონუსი</th>
+                    <th>გასაცემი თანხა</th>
+                    <th>სტატუსი</th>
+                    <th>მოქმედება</th>
+                  </tr>
+                </thead>
               <tbody>
                 {salaries.length === 0 ? (
                   <tr>
@@ -282,7 +448,8 @@ export const AdminExpensesPayroll: React.FC = () => {
             </table>
           </div>
         </div>
-      )}
+      </>
+    )}
 
       {/* Modal: Expense */}
       {isExpenseModalOpen && (

@@ -69,7 +69,6 @@ function isCurrentMonthTbilisi(dateStr) {
 async function getPointNamesMap() {
   const pointNames = {
     'point-mega-gym': 'Mega Gym',
-    'point-xxl': 'XXL',
     'point-fitness-academy': 'Fitness Academy',
   };
 

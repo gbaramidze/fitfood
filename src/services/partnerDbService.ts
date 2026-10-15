@@ -7,6 +7,7 @@ import {
   PartnerWriteOff,
 } from '@/types/partner';
 import { mapSupabaseProductToAdminDish } from '@/lib/adminDishMapper';
+import { getPointLogo } from '@/data/partnerData';
 
 // Helper to sort partner products according to custom admin order or sortOrder field
 export function sortPartnerProducts(products: PartnerProduct[]): PartnerProduct[] {
@@ -44,17 +45,20 @@ export const partnerDbService = {
     try {
       const { data, error } = await supabase.from('partner_points').select('*').order('created_at', { ascending: true });
       if (error || !data) return null;
-      return data.map(p => ({
-        id: p.id,
-        name: p.name,
-        city: p.city,
-        address: p.address,
-        cashierPin: p.cashier_pin,
-        managerPin: p.manager_pin,
-        commissionPercent: p.commission_percent || 0,
-        phone: p.phone,
-        status: p.status,
-      }));
+      return data
+        .filter(p => p.id !== 'point-xxl' && (typeof p.name === 'string' ? p.name.toUpperCase() !== 'XXL' : p.name?.ka?.toUpperCase() !== 'XXL'))
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          city: p.city,
+          address: p.address,
+          cashierPin: p.cashier_pin,
+          managerPin: p.manager_pin,
+          commissionPercent: p.commission_percent || 0,
+          phone: p.phone,
+          status: p.status,
+          logo: p.logo || getPointLogo({ id: p.id, name: p.name, logo: p.logo }),
+        }));
     } catch {
       return null;
     }

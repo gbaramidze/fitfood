@@ -18,6 +18,7 @@ export interface PartnerPoint {
   commissionPercent: number; // e.g. 20%
   phone: string;
   status: 'active' | 'inactive';
+  logo?: string;
 }
 
 export interface PartnerProduct {
