@@ -4,8 +4,12 @@ import React from 'react';
 import Link from 'next/link';
 import { useAdmin } from '@/context/AdminContext';
 
-export const AdminHeader: React.FC = () => {
-  const { 
+interface AdminHeaderProps {
+  onToggleSidebar?: () => void;
+}
+
+export const AdminHeader: React.FC<AdminHeaderProps> = ({ onToggleSidebar }) => {
+  const {
     setActiveTab, 
     searchQuery, 
     setSearchQuery, 
@@ -20,6 +24,18 @@ export const AdminHeader: React.FC = () => {
   return (
     <header className="admin-top-header">
       <div className="admin-header-left">
+        <button
+          type="button"
+          className="admin-mobile-menu-btn"
+          onClick={onToggleSidebar}
+          aria-label="ნავიგაციის მენიუ"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
         <Link href="/" className="admin-brand-link">
           <div className="admin-brand-badge">FITFOOD</div>
           <span className="admin-brand-title">მართვის პანელი</span>

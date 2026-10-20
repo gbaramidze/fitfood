@@ -133,6 +133,55 @@ export const AdminPosSalesHistory: React.FC = () => {
     return filteredSales.filter(s => s.status === 'completed');
   }, [filteredSales]);
 
+  // Helper to resolve a sold item's dish category
+  const resolveItemCategory = (it: { productId?: string; productName: string }): string => {
+    const nameNorm = (it.productName || '').trim().toLowerCase();
+    const dish = dishes.find(d =>
+      (it.productId && d.id === it.productId) ||
+      (typeof d.name === 'object' && (
+        (d.name.ka && d.name.ka.trim().toLowerCase() === nameNorm) ||
+        (d.name.ru && d.name.ru.trim().toLowerCase() === nameNorm) ||
+        (d.name.en && d.name.en.trim().toLowerCase() === nameNorm)
+      )) ||
+      (typeof d.name === 'string' && (d.name as string).trim().toLowerCase() === nameNorm)
+    );
+    return dish?.category || 'other';
+  };
+
+  // Breakdown of sold positions by dish category for the selected period/filters
+  const categoryBreakdown = useMemo(() => {
+    const map: Record<string, { quantity: number; revenue: number }> = {};
+
+    completedSales.forEach(s => {
+      if (!Array.isArray(s.items)) return;
+      s.items.forEach(it => {
+        const catId = resolveItemCategory(it);
+        const qty = Number(it.quantity) || 1;
+        const revenue = Number(it.totalPrice) || ((Number(it.pricePerUnit) || 0) * qty);
+
+        if (!map[catId]) map[catId] = { quantity: 0, revenue: 0 };
+        map[catId].quantity += qty;
+        map[catId].revenue += revenue;
+      });
+    });
+
+    const totalRevenue = Object.values(map).reduce((sum, c) => sum + c.revenue, 0);
+
+    return Object.entries(map)
+      .map(([id, data]) => {
+        const catInfo = COOK_CATEGORIES.find(c => c.id === id);
+        return {
+          id,
+          label: catInfo?.label || 'სხვა',
+          icon: catInfo?.icon || '🍽️',
+          quantity: data.quantity,
+          revenue: data.revenue,
+          sharePercent: totalRevenue > 0 ? Math.round((data.revenue / totalRevenue) * 100) : 0,
+        };
+      })
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [completedSales, dishes]);
+
   // Overall Financial Calculations with Category Differentiation
   const salesStats = useMemo(() => {
     let totalGross = 0;
@@ -192,15 +241,15 @@ export const AdminPosSalesHistory: React.FC = () => {
       selectedPeriod === 'last_month' ? 'წინა თვე' :
       selectedPeriod === 'custom' ? `${customStartDate} — ${customEndDate}` : 'ყველა დრო';
 
-    const text = `📊 FitFood ანგარიში (${periodLabel}):\n` +
-      `• სრული გაყიდვები (ნომინალით): ${salesStats.totalGross.toFixed(2)} ₾\n` +
-      `• ფაქტობრივი სალარო (ფასდაკლებით): ${salesStats.totalNet.toFixed(2)} ₾\n` +
-      `• ფასდაკლებები / უფასო: -${salesStats.totalDiscount.toFixed(2)} ₾\n` +
+    const text = `FitFood ანგარიში (${periodLabel}):\n` +
+      `- სრული გაყიდვები (ნომინალით): ${salesStats.totalGross.toFixed(2)} ₾\n` +
+      `- ფაქტობრივი სალარო (ფასდაკლებით): ${salesStats.totalNet.toFixed(2)} ₾\n` +
+      `- ფასდაკლებები / უფასო: -${salesStats.totalDiscount.toFixed(2)} ₾\n` +
       `---------------------------------\n` +
-      `🍳 სამზარეულოს კერძები (მზარეულისთვის): ${salesStats.totalCookGross.toFixed(2)} ₾ (${salesStats.totalCookUnits} ულუფა)\n` +
-      `☕ გამორიცხულია (ყავა/სასმელები): ${salesStats.totalExcludedGross.toFixed(2)} ₾ (${salesStats.totalExcludedUnits} ცალი)\n` +
+      `სამზარეულოს კერძები (მზარეულისთვის): ${salesStats.totalCookGross.toFixed(2)} ₾ (${salesStats.totalCookUnits} ულუფა)\n` +
+      `გამორიცხულია (ყავა/სასმელები): ${salesStats.totalExcludedGross.toFixed(2)} ₾ (${salesStats.totalExcludedUnits} ცალი)\n` +
       `---------------------------------\n` +
-      `👨‍🍳 მზარეულის 5% (კერძების სრული ფასიდან): ${salesStats.cookCommission.toFixed(2)} ₾`;
+      `მზარეულის 5% (კერძების სრული ფასიდან): ${salesStats.cookCommission.toFixed(2)} ₾`;
 
     navigator.clipboard?.writeText(text);
     setCopiedSummary(true);
@@ -402,6 +451,57 @@ export const AdminPosSalesHistory: React.FC = () => {
           <b>კატეგორიების გამორიცხვა:</b> მზარეული იღებს 5%-ს მხოლოდ იმ კერძებიდან, რომელსაც თავად ამზადებს (<b>{salesStats.totalCookGross.toFixed(2)} ₾ × 5% = {salesStats.cookCommission.toFixed(2)} ₾</b>).
           სასმელები, ყავა და ჩაი (ჯამში <b>{salesStats.totalExcludedGross.toFixed(2)} ₾</b>) ავტომატურად <b>არ ერიცხება</b> მზარეულის ბონუსში.
         </div>
+      </div>
+
+      {/* Sales by Category Breakdown */}
+      <div className="admin-card" style={{ marginBottom: '20px' }}>
+        <div className="admin-card-header">
+          <div>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>📊</span> გაყიდვები კატეგორიების მიხედვით
+            </h3>
+            <p>რაოდენობა და შემოსავალი კერძების კატეგორიების მიხედვით არჩეულ პერიოდში</p>
+          </div>
+        </div>
+
+        {categoryBreakdown.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px 12px', color: '#9CA3AF' }}>
+            არჩეულ პერიოდში გაყიდვები არ მოიძებნა.
+          </div>
+        ) : (
+          <div className="admin-table-responsive">
+            <table className="admin-data-table">
+              <thead>
+                <tr>
+                  <th>კატეგორია</th>
+                  <th>გაყიდულია</th>
+                  <th>შემოსავალი (ნომინალი)</th>
+                  <th>წილი</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categoryBreakdown.map(cat => (
+                  <tr key={cat.id}>
+                    <td>
+                      <span style={{ marginRight: '6px' }}>{cat.icon}</span>
+                      <b>{cat.label}</b>
+                    </td>
+                    <td>{cat.quantity} ცალი</td>
+                    <td><b className="text-success">{cat.revenue.toFixed(2)} ₾</b></td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div className="progress-bar-bg" style={{ width: '80px' }}>
+                          <div className="progress-bar-fill" style={{ width: `${cat.sharePercent}%` }}></div>
+                        </div>
+                        <span style={{ fontSize: '12px' }}>{cat.sharePercent}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Secondary Filters Bar: Points & Payment Method */}

@@ -2183,3 +2183,421 @@
   opacity: 0.3;
   cursor: not-allowed;
 }
+
+/* ============================================================================
+   SALES FORECAST (PREP PLANNER)
+   ============================================================================ */
+.forecast-trend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.forecast-trend-badge.trend-up { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+.forecast-trend-badge.trend-down { background: rgba(239, 68, 68, 0.15); color: #EF4444; }
+.forecast-trend-badge.trend-flat { background: #1F2937; color: #9CA3AF; }
+
+.forecast-confidence {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.forecast-confidence.conf-high { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+.forecast-confidence.conf-medium { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
+.forecast-confidence.conf-low { background: rgba(239, 68, 68, 0.12); color: #F87171; }
+
+/* ============================================================================
+   DISHES LIST VIEW (replaces the card grid)
+   ============================================================================ */
+.admin-dish-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-dish-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #111827;
+  border: 1px solid #1F2937;
+  border-radius: 8px;
+  padding: 12px 14px;
+  transition: all 0.15s ease;
+}
+
+.admin-dish-row-price,
+.admin-dish-row-actions {
+  padding-top: 2px;
+}
+
+.admin-dish-row:hover {
+  background: #162032;
+  border-color: #374151;
+}
+
+.admin-dish-row-thumb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 7px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #181B22;
+  border: 1px solid #1F2937;
+}
+
+.admin-dish-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-dish-row-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-dish-row-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #F9FAFB;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.admin-dish-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: #9CA3AF;
+}
+
+.admin-dish-row-kbju {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: #9CA3AF;
+}
+
+.admin-dish-row-kbju b {
+  color: #E5E7EB;
+}
+
+.admin-dish-row-price {
+  text-align: right;
+  flex-shrink: 0;
+  min-width: 86px;
+}
+
+.admin-dish-row-price .price-retail {
+  display: block;
+  font-size: 15px;
+}
+
+.admin-dish-row-price .price-cost {
+  display: block;
+  font-size: 10.5px;
+  margin-top: 1px;
+}
+
+.admin-dish-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-dish-chart {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10B981;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-dish-chart:hover { background: rgba(16, 185, 129, 0.22); }
+
+/* ============================================================================
+   PER-DISH SALES CHART MODAL
+   ============================================================================ */
+.chart-range-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.chart-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.chart-kpi {
+  background: #0D131F;
+  border: 1px solid #1F2937;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chart-kpi-label {
+  font-size: 10.5px;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.chart-kpi-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: #F9FAFB;
+}
+
+.chart-empty-state {
+  text-align: center;
+  padding: 36px 16px;
+  color: #9CA3AF;
+  background: #0D131F;
+  border: 1px dashed #1F2937;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.chart-hover-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  margin-top: 6px;
+  background: #0D131F;
+  border: 1px solid #1F2937;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #E5E7EB;
+  min-height: 20px;
+}
+
+/* ============================================================================
+   RESPONSIVE / MOBILE LAYOUT
+   Breakpoints: 1024px (medium), 900px (sidebar collapse), 640px (narrow)
+   ============================================================================ */
+
+.admin-mobile-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-right: 2px;
+  background: transparent;
+  border: 1px solid #1F2937;
+  border-radius: 8px;
+  color: #F9FAFB;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.admin-mobile-menu-btn:hover {
+  background: #1F2937;
+}
+
+.admin-sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .admin-mobile-menu-btn {
+    display: flex;
+  }
+
+  .admin-sidebar {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    bottom: 0;
+    width: min(82vw, 290px);
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 210;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    overflow-y: auto;
+  }
+
+  .admin-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .admin-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 200;
+  }
+
+  .admin-nav-item {
+    min-height: 44px;
+  }
+
+  .admin-main-content {
+    padding: 16px;
+  }
+
+  .admin-badge-hq {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-top-header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .admin-header-center {
+    margin: 0 8px;
+    max-width: none;
+  }
+
+  .admin-brand-title {
+    display: none;
+  }
+
+  .admin-header-stats-pill {
+    display: none;
+  }
+
+  .admin-action-btn.btn-site {
+    display: none;
+  }
+
+  .admin-page-hero {
+    margin-bottom: 16px;
+  }
+
+  .admin-page-title {
+    font-size: 19px;
+  }
+
+  .admin-kpi-grid,
+  .admin-demand-grid,
+  .admin-dishes-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-filters-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-filter-group {
+    flex-wrap: wrap;
+  }
+
+  .order-card-body {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .order-pricing-box {
+    text-align: left;
+  }
+
+  .chart-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-dish-row-title {
+    max-width: 180px;
+  }
+}
+
+@media (max-width: 560px) {
+  .admin-header-right {
+    gap: 6px;
+  }
+
+  .admin-action-btn span,
+  .admin-action-btn {
+    font-size: 11.5px;
+    padding: 6px 10px;
+  }
+
+  .admin-search-input {
+    font-size: 12.5px;
+  }
+
+  .admin-page-hero,
+  .admin-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-hero-actions {
+    width: 100%;
+  }
+
+  .admin-dish-row {
+    flex-wrap: wrap;
+  }
+
+  .admin-dish-row-body {
+    order: 1;
+    flex-basis: calc(100% - 66px);
+  }
+
+  .admin-dish-row-price {
+    order: 2;
+    text-align: left;
+  }
+
+  .admin-dish-row-actions {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-top: 4px;
+  }
+
+  .chart-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .chart-range-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-modal-container {
+    padding: 14px;
+  }
+}

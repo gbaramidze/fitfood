@@ -8,6 +8,8 @@ import { MealType, DayOfWeek } from '@/types';
 import { LazyProductImage } from '@/components/partner/LazyProductImage';
 import { productImageService } from '@/services/productImageService';
 import { supabaseStorageService, compressImageToBlob } from '@/services/supabaseStorageService';
+import { computeDishTrend } from '@/lib/dishSalesHelper';
+import { AdminDishSalesModal } from '@/components/admin/AdminDishSalesModal';
 
 const PRESET_IMAGES = [
   { url: '/images/meals/syrniki-strawberry.webp', label: 'სირნიკები მარწყვით' },
@@ -87,13 +89,14 @@ CREATE POLICY "Public Delete Product Images" ON storage.objects
   FOR DELETE USING (bucket_id = 'product-images');`;
 
 export const AdminDishesManager: React.FC = () => {
-  const { dishes, addDish, updateDish, deleteDish, setDishesOrder, searchQuery, refreshDishes, isLoadingDishes } = useAdmin();
+  const { dishes, sales, points, addDish, updateDish, deleteDish, setDishesOrder, searchQuery, refreshDishes, isLoadingDishes } = useAdmin();
 
   const [channelFilter, setChannelFilter] = useState<'all' | 'site' | 'pos'>('all');
   const [dayFilter, setDayFilter] = useState<string>('all');
   const [editingDish, setEditingDish] = useState<AdminDish | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [salesModalDish, setSalesModalDish] = useState<AdminDish | null>(null);
 
   // Storage Modal & State
   const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
@@ -1262,153 +1265,103 @@ export const AdminDishesManager: React.FC = () => {
               </div>
             </div>
           ) : (
-            /* Dishes Grid */
-            <div className="admin-dishes-grid">
+            /* Dishes List */
+            <div className="admin-dish-list">
               {filteredDishes.map((dish) => {
                 const dayName = DAYS_MAP.find(d => d.id === dish.day)?.label || 'ორშაბათი';
+                const catInfo = CATEGORY_OPTIONS.find(c => c.id === dish.category);
                 const margin = (dish.retailPrice || 0) - (dish.costPrice || 0);
                 const isJustAdded = dish.id === lastAddedDishId;
-                const isStorageImage = dish.image?.includes('supabase.co/storage');
+                const trend = computeDishTrend(sales, dish);
 
                 return (
-                  <div 
-                    key={dish.id} 
-                    className="admin-dish-card"
+                  <div
+                    key={dish.id}
+                    className="admin-dish-row"
                     style={isJustAdded ? {
                       borderColor: '#10B981',
-                      boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.4), 0 8px 24px rgba(16, 185, 129, 0.2)',
-                      transition: 'all 0.3s ease',
+                      boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.4)',
                     } : undefined}
                   >
-                    <div className="admin-dish-image-wrapper">
+                    <div className="admin-dish-row-thumb">
                       <LazyProductImage
                         productId={dish.id}
                         src={dish.image}
                         alt={dish.name?.ka || dish.name?.ru || 'კერძი'}
-                        sizes="(max-width: 768px) 100vw, 350px"
+                        sizes="52px"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
-                      <div className="admin-dish-badges-overlay">
-                        {isJustAdded && (
-                          <span style={{
-                            background: '#10B981',
-                            color: '#064E3B',
-                            fontWeight: 800,
-                            fontSize: '11px',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                          }}>
-                            ✨ ახალი
-                          </span>
-                        )}
-                        {isStorageImage && (
-                          <span style={{
-                            background: 'rgba(16, 185, 129, 0.9)',
-                            color: '#FFFFFF',
-                            fontWeight: 700,
-                            fontSize: '10px',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                          }} title="ფოტო ინახება Supabase Storage-ში">
-                            ☁️ Storage
-                          </span>
-                        )}
-                        {(!dish.targetChannels || dish.targetChannels.includes('site')) && <span className="channel-badge badge-site">🌐 საიტი</span>}
-                        {(!dish.targetChannels || dish.targetChannels.includes('pos')) && <span className="channel-badge badge-pos">🏢 დარბაზი</span>}
-                      </div>
-                      <div className="admin-dish-cooking-badge">
-                        📅 {dayName}
-                      </div>
                     </div>
 
-                    <div className="admin-dish-body">
-                      <div className="admin-dish-header-row">
-                        <span className="dish-category-label">
+                    <div className="admin-dish-row-body">
+                      <div className="admin-dish-row-title-line">
+                        <span className="admin-dish-row-title">
+                          {dish.name?.ka || dish.name?.ru || dish.name?.en || 'კერძი'}
+                        </span>
+                        {isJustAdded && <span className="table-badge badge-green">✨ ახალი</span>}
+                        {(!dish.targetChannels || dish.targetChannels.includes('site')) && <span className="channel-badge badge-site">🌐 საიტი</span>}
+                        {(!dish.targetChannels || dish.targetChannels.includes('pos')) && <span className="channel-badge badge-pos">🏢 დარბაზი</span>}
+                        {trend.hasData && (
+                          trend.direction === 'up' ? (
+                            <span className="forecast-trend-badge trend-up">⬆ +{trend.percent}%</span>
+                          ) : trend.direction === 'down' ? (
+                            <span className="forecast-trend-badge trend-down">⬇ {trend.percent}%</span>
+                          ) : (
+                            <span className="forecast-trend-badge trend-flat">→ სტაბილური</span>
+                          )
+                        )}
+                      </div>
+
+                      <div className="admin-dish-row-meta">
+                        <span>{catInfo?.icon} {catInfo?.label}</span>
+                        <span>•</span>
+                        <span>
                           {dish.mealType === 'breakfast' ? 'საუზმე' :
                            dish.mealType === 'lunch' ? 'სადილი' :
                            dish.mealType === 'snack' ? 'სამხარი' :
                            dish.mealType === 'dinner' ? 'ვახშამი' : 'დესერტი'}
                         </span>
-                        <span className="dish-weight">{dish.macros?.weightGrams || 300} გრამი</span>
+                        <span>•</span>
+                        <span>📅 {dayName}</span>
+                        <span>•</span>
+                        <span>{dish.macros?.weightGrams || 300} გრ</span>
                       </div>
 
-                      <h3 className="admin-dish-title">{dish.name?.ka || dish.name?.ru || dish.name?.en || 'კერძი'}</h3>
-
-                      {/* KBJU Strip */}
-                      <div className="admin-kbju-strip">
-                        <div className="kbju-box cal">
-                          <span className="kbju-num">{dish.macros?.calories || 0}</span>
-                          <span className="kbju-lbl">კკალ</span>
-                        </div>
-                        <div className="kbju-box p">
-                          <span className="kbju-num">{dish.macros?.protein || 0}გ</span>
-                          <span className="kbju-lbl">ცილა</span>
-                        </div>
-                        <div className="kbju-box f">
-                          <span className="kbju-num">{dish.macros?.fat || 0}გ</span>
-                          <span className="kbju-lbl">ცხიმი</span>
-                        </div>
-                        <div className="kbju-box c">
-                          <span className="kbju-num">{dish.macros?.carbs || 0}გ</span>
-                          <span className="kbju-lbl">ნახშ</span>
-                        </div>
+                      <div className="admin-dish-row-kbju">
+                        <span><b>{dish.macros?.calories || 0}</b> კკალ</span>
+                        <span><b>{dish.macros?.protein || 0}გ</b> ცილა</span>
+                        <span><b>{dish.macros?.fat || 0}გ</b> ცხიმი</span>
+                        <span><b>{dish.macros?.carbs || 0}გ</b> ნახშ</span>
                       </div>
+                    </div>
 
-                      {/* Price and Margin */}
-                      <div className="admin-dish-finance-row">
-                        <div className="price-item">
-                          <span className="price-label">თვითღირებულება:</span>
-                          <span className="price-cost">{(dish.costPrice || 0).toFixed(1)} ₾</span>
-                        </div>
-                        <div className="price-item">
-                          <span className="price-label">გასაყიდი:</span>
-                          <span className="price-retail">{(dish.retailPrice || 0).toFixed(1)} ₾</span>
-                        </div>
-                        <div className="margin-item">
-                          <span className="margin-pill">+{margin.toFixed(1)} ₾</span>
-                        </div>
-                      </div>
+                    <div className="admin-dish-row-price">
+                      <span className="price-retail">{(dish.retailPrice || 0).toFixed(1)} ₾</span>
+                      <span className="price-cost">თვითღ. {(dish.costPrice || 0).toFixed(1)} ₾ • +{margin.toFixed(1)} ₾</span>
+                    </div>
 
-                      {/* Ingredients Recipe Preview */}
-                      {dish.ingredients && ((dish.ingredients.ka && dish.ingredients.ka.length > 0) || (dish.ingredients.ru && dish.ingredients.ru.length > 0)) && (
-                        <div style={{ fontSize: '11.5px', color: '#9CA3AF', margin: '8px 0', background: '#0D131F', padding: '6px 10px', borderRadius: '6px', border: '1px solid #1F2937' }}>
-                          <div style={{ fontWeight: 600, color: '#E5E7EB', marginBottom: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>🥗 შემადგენლობა:</span>
-                            <span style={{ fontSize: '10px', color: '#10B981', background: 'rgba(16, 185, 129, 0.12)', padding: '1px 6px', borderRadius: '4px' }}>
-                              {dish.ingredients.ka?.length || dish.ingredients.ru?.length || 0} ინგრედიენტი
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#94A3B8', lineHeight: '1.4' }}>
-                            {(dish.ingredients.ka?.length ? dish.ingredients.ka : dish.ingredients.ru || []).slice(0, 3).join(', ')}
-                            {((dish.ingredients.ka?.length || dish.ingredients.ru?.length || 0) > 3) ? ' ...' : ''}
-                          </div>
-                        </div>
-                      )}
-
-                      {dish.allergens && dish.allergens.length > 0 && (
-                        <div className="admin-dish-allergens">
-                          {dish.allergens.map(a => (
-                            <span key={a} className="allergen-tag">{a}</span>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="admin-dish-actions">
-                        <button onClick={() => openEditModal(dish)} className="btn-dish-edit">
-                          ✏️ რედაქტირება
-                        </button>
-                        <button 
-                          onClick={async () => {
-                            if (confirm(`წაიშალოს კერძი «${dish.name.ka}» ბაზიდან?`)) {
-                              await deleteDish(dish.id);
-                            }
-                          }} 
-                          className="btn-dish-delete"
-                          title="კერძის წაშლა"
-                        >
-                          🗑️
-                        </button>
-                      </div>
+                    <div className="admin-dish-row-actions">
+                      <button
+                        onClick={() => setSalesModalDish(dish)}
+                        className="btn-dish-chart"
+                        title="გაყიდვების დინამიკა (გრაფიკი)"
+                      >
+                        📈 გაყიდვები
+                      </button>
+                      <button onClick={() => openEditModal(dish)} className="btn-dish-edit" style={{ flex: 'initial', padding: '6px 10px' }}>
+                        ✏️
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (confirm(`წაიშალოს კერძი «${dish.name.ka}» ბაზიდან?`)) {
+                            await deleteDish(dish.id);
+                          }
+                        }}
+                        className="btn-dish-delete"
+                        title="კერძის წაშლა"
+                      >
+                        🗑️
+                      </button>
                     </div>
                   </div>
                 );
@@ -2275,6 +2228,16 @@ export const AdminDishesManager: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal: Per-dish sales history with date range & chart */}
+      {salesModalDish && (
+        <AdminDishSalesModal
+          dish={salesModalDish}
+          sales={sales}
+          points={points}
+          onClose={() => setSalesModalDish(null)}
+        />
       )}
     </div>
   );

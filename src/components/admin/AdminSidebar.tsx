@@ -3,8 +3,13 @@
 import React from 'react';
 import { useAdmin, AdminTab } from '@/context/AdminContext';
 
-export const AdminSidebar: React.FC = () => {
-  const { 
+interface AdminSidebarProps {
+  isMobileOpen?: boolean;
+  onClose?: () => void;
+}
+
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isMobileOpen = false, onClose }) => {
+  const {
     activeTab, 
     setActiveTab, 
     incomingOrders,
@@ -46,6 +51,11 @@ export const AdminSidebar: React.FC = () => {
       count: sales.length,
     },
     {
+      id: 'forecast',
+      label: 'გაყიდვების პროგნოზი',
+      icon: '🔮',
+    },
+    {
       id: 'programs',
       label: 'რაციონები & მოთხოვნა',
       icon: '🥗',
@@ -83,38 +93,46 @@ export const AdminSidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="admin-sidebar">
-      <div className="admin-sidebar-section-title">ნავიგაცია</div>
-      <nav className="admin-nav-list">
-        {menuItems.map((item) => {
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`admin-nav-item ${isActive ? 'active' : ''}`}
-            >
-              <span className="admin-nav-icon">{item.icon}</span>
-              <span className="admin-nav-label">{item.label}</span>
-              {item.count !== undefined && (
-                <span className={`admin-nav-count ${item.countHighlight ? 'count-alert' : ''}`}>
-                  {item.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
+    <>
+      {isMobileOpen && (
+        <div className="admin-sidebar-backdrop" onClick={onClose} aria-hidden="true" />
+      )}
+      <aside className={`admin-sidebar ${isMobileOpen ? 'mobile-open' : ''}`}>
+        <div className="admin-sidebar-section-title">ნავიგაცია</div>
+        <nav className="admin-nav-list">
+          {menuItems.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  onClose?.();
+                }}
+                className={`admin-nav-item ${isActive ? 'active' : ''}`}
+              >
+                <span className="admin-nav-icon">{item.icon}</span>
+                <span className="admin-nav-label">{item.label}</span>
+                {item.count !== undefined && (
+                  <span className={`admin-nav-count ${item.countHighlight ? 'count-alert' : ''}`}>
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
 
-      <div className="admin-sidebar-footer">
-        <div className="admin-user-card">
-          <div className="admin-avatar">🏢</div>
-          <div className="admin-user-info">
-            <div className="admin-user-name">ხელმძღვანელი</div>
-            <div className="admin-user-role">ადმინისტრატორი</div>
+        <div className="admin-sidebar-footer">
+          <div className="admin-user-card">
+            <div className="admin-avatar">🏢</div>
+            <div className="admin-user-info">
+              <div className="admin-user-name">ხელმძღვანელი</div>
+              <div className="admin-user-role">ადმინისტრატორი</div>
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 };

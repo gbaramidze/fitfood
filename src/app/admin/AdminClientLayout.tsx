@@ -9,6 +9,7 @@ import { AdminDashboardOverview } from '@/components/admin/AdminDashboardOvervie
 import { AdminIncomingOrders } from '@/components/admin/AdminIncomingOrders';
 import { AdminCustomersCRM } from '@/components/admin/AdminCustomersCRM';
 import { AdminPosSalesHistory } from '@/components/admin/AdminPosSalesHistory';
+import { AdminSalesForecast } from '@/components/admin/AdminSalesForecast';
 import { AdminProgramsManager } from '@/components/admin/AdminProgramsManager';
 import { AdminDishesManager } from '@/components/admin/AdminDishesManager';
 import { AdminPointTransfers } from '@/components/admin/AdminPointTransfers';
@@ -27,6 +28,7 @@ function AdminMainContent() {
       {activeTab === 'orders' && <AdminIncomingOrders />}
       {activeTab === 'customers' && <AdminCustomersCRM />}
       {activeTab === 'sales' && <AdminPosSalesHistory />}
+      {activeTab === 'forecast' && <AdminSalesForecast />}
       {activeTab === 'programs' && <AdminProgramsManager />}
       {activeTab === 'dishes' && <AdminDishesManager />}
       {activeTab === 'transfers' && <AdminPointTransfers />}
@@ -52,6 +54,8 @@ export const AdminClientLayout: React.FC<AdminClientLayoutProps> = ({
   initialPoints = [],
   initialSales = [],
 }) => {
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
+
   return (
     <AdminProvider
       initialServerDishes={initialDishes}
@@ -61,9 +65,12 @@ export const AdminClientLayout: React.FC<AdminClientLayoutProps> = ({
       initialServerSales={initialSales}
     >
       <div className="admin-root-container">
-        <AdminHeader />
+        <AdminHeader onToggleSidebar={() => setIsMobileSidebarOpen(v => !v)} />
         <div className="admin-body-layout">
-          <AdminSidebar />
+          <AdminSidebar
+            isMobileOpen={isMobileSidebarOpen}
+            onClose={() => setIsMobileSidebarOpen(false)}
+          />
           <AdminMainContent />
         </div>
       </div>
