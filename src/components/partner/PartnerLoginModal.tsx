@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { usePartner } from '@/context/PartnerContext';
 import { getPointLogo } from '@/data/partnerData';
+import { MapPin, X } from 'lucide-react';
 
 interface PartnerLoginModalProps {
   isOpen: boolean;
@@ -144,7 +145,7 @@ export const PartnerLoginModal: React.FC<PartnerLoginModalProps> = ({
               className="partner-auth-close-btn"
               title="დახურვა"
             >
-              ✕
+              <X size={16} />
             </button>
           )}
         </div>
@@ -185,7 +186,7 @@ export const PartnerLoginModal: React.FC<PartnerLoginModalProps> = ({
                     </div>
                     <div className="partner-point-details">
                       <h3 className="partner-point-name">{pointName}</h3>
-                      <span className="partner-point-addr">📍 {pointAddress}</span>
+                      <span className="partner-point-addr"><MapPin size={11} /> {pointAddress}</span>
                     </div>
                     <div className="partner-point-enter-badge">
                       ავტორიზაცია PIN-ით →
@@ -223,7 +224,7 @@ export const PartnerLoginModal: React.FC<PartnerLoginModalProps> = ({
                 />
                 <div className="gym-chip-text">
                   <b>{selectedPoint.name?.ka || selectedPoint.name?.ru}</b>
-                  <span>📍 {selectedPoint.address?.ka || selectedPoint.address?.ru}</span>
+                  <span><MapPin size={11} /> {selectedPoint.address?.ka || selectedPoint.address?.ru}</span>
                 </div>
               </div>
             </div>

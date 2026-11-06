@@ -5,6 +5,11 @@ import Image from 'next/image';
 import { usePartner } from '@/context/PartnerContext';
 import { PartnerProduct, PartnerSale, PartnerSaleItem } from '@/types/partner';
 import { IconTrash } from '@/components/Icons';
+import {
+  Globe, MapPin, Printer, Package, ClipboardList, Drumstick, Beef, Fish, Croissant,
+  Salad, Soup, CakeSlice, CupSoda, CreditCard, Banknote, Gift, Tag, Shuffle, Check,
+  X, Pencil, Undo2, Trash2, Save, Lightbulb, RotateCcw,
+} from 'lucide-react';
 
 export const ZReportView: React.FC = () => {
   const { currentPoint, points, products, getPointStock, sales, editSale, refundSale, deleteSale } = usePartner();
@@ -304,14 +309,14 @@ export const ZReportView: React.FC = () => {
       {/* Alert notification */}
       {alertMessage && (
         <div className="partner-min-alert">
-          <span>✓ {alertMessage}</span>
+          <span><Check size={14} /> {alertMessage}</span>
         </div>
       )}
 
       {/* Top Header & Filters */}
       <div className="partner-min-head" style={{ alignItems: 'flex-start' }}>
         <div>
-          <h2>დღიური ანგარიში</h2>
+          <h2>დღის ანგარიში</h2>
           <p>
             {selectedPointId === 'all'
               ? 'სრული შეჯამება ყველა წერტილზე'
@@ -328,10 +333,10 @@ export const ZReportView: React.FC = () => {
               className="partner-min-input"
               style={{ padding: '6px 10px', fontSize: '12.5px', background: '#111318' }}
             >
-              <option value="all">🌐 ყველა წერტილი</option>
+              <option value="all">ყველა წერტილი</option>
               {points.map(p => (
                 <option key={p.id} value={p.id}>
-                  📍 {p.name.ka || p.name.ru}
+                  {p.name.ka || p.name.ru}
                 </option>
               ))}
             </select>
@@ -356,7 +361,7 @@ export const ZReportView: React.FC = () => {
           </div>
 
           <button onClick={() => window.print()} className="partner-min-btn-outline">
-            🖨️ ანგარიშის ბეჭდვა
+            <Printer size={14} /> ანგარიშის ბეჭდვა
           </button>
         </div>
       </div>
@@ -372,7 +377,7 @@ export const ZReportView: React.FC = () => {
         </div>
 
         <div className="partner-min-kpi">
-          <span className="label">💳 ბარათით</span>
+          <span className="label"><CreditCard size={12} /> ბარათით</span>
           <strong className="value" style={{ color: '#60A5FA' }}>
             {cardRevenue.toFixed(2)} ₾
           </strong>
@@ -380,7 +385,7 @@ export const ZReportView: React.FC = () => {
         </div>
 
         <div className="partner-min-kpi">
-          <span className="label">💵 ნაღდით</span>
+          <span className="label"><Banknote size={12} /> ნაღდით</span>
           <strong className="value" style={{ color: '#34D399' }}>
             {cashRevenue.toFixed(2)} ₾
           </strong>
@@ -388,7 +393,7 @@ export const ZReportView: React.FC = () => {
         </div>
 
         <div className="partner-min-kpi">
-          <span className="label">🎁 უფასო რაციონი</span>
+          <span className="label"><Gift size={12} /> უფასო რაციონი</span>
           <strong className="value" style={{ color: '#A855F7' }}>
             {freeItemsCount} ც.
           </strong>
@@ -396,7 +401,7 @@ export const ZReportView: React.FC = () => {
         </div>
 
         <div className="partner-min-kpi">
-          <span className="label">🏷️ ფასდაკლება</span>
+          <span className="label"><Tag size={12} /> ფასდაკლება</span>
           <strong className="value" style={{ color: '#EC4899' }}>
             -{totalDiscountsGiven.toFixed(2)} ₾
           </strong>
@@ -420,7 +425,7 @@ export const ZReportView: React.FC = () => {
       <div className="partner-min-card" style={{ marginTop: '10px' }}>
         <div className="card-title-row">
           <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>📦 რა რაოდენობა გაიყიდა</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Package size={16} /> რა რაოდენობა გაიყიდა</span>
             <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 400 }}>
               (პოზიციების შეჯამება: {selectedDateStr})
             </span>
@@ -463,18 +468,19 @@ export const ZReportView: React.FC = () => {
             ყველა ({productBreakdownList.length})
           </button>
           {[
-            { id: 'poultry', label: 'ქათამი', icon: '🍗' },
-            { id: 'meat', label: 'ხორცი', icon: '🥩' },
-            { id: 'fish', label: 'თევზი', icon: '🐟' },
-            { id: 'breakfast', label: 'საუზმე', icon: '🥞' },
-            { id: 'salad', label: 'სალათი', icon: '🥗' },
-            { id: 'soup', label: 'სუპი', icon: '🍲' },
-            { id: 'dessert', label: 'დესერტი', icon: '🧁' },
-            { id: 'drinks', label: 'სასმელი', icon: '🥤' },
+            { id: 'poultry', label: 'ქათამი', icon: Drumstick },
+            { id: 'meat', label: 'ხორცი', icon: Beef },
+            { id: 'fish', label: 'თევზი', icon: Fish },
+            { id: 'breakfast', label: 'საუზმე', icon: Croissant },
+            { id: 'salad', label: 'სალათი', icon: Salad },
+            { id: 'soup', label: 'სუპი', icon: Soup },
+            { id: 'dessert', label: 'დესერტი', icon: CakeSlice },
+            { id: 'drinks', label: 'სასმელი', icon: CupSoda },
           ].map(c => {
             const isSel = selectedCategoryFilters.includes(c.id);
             const count = productBreakdownList.filter(item => getProductCategory(item.product, item.name) === c.id).length;
             if (count === 0 && !isSel) return null;
+            const CatIcon = c.icon;
 
             return (
               <button
@@ -495,7 +501,7 @@ export const ZReportView: React.FC = () => {
                   gap: '4px',
                 }}
               >
-                <span>{c.icon} {c.label}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CatIcon size={12} /> {c.label}</span>
                 <span style={{ fontSize: '10px', opacity: 0.8 }}>({count})</span>
               </button>
             );
@@ -629,7 +635,7 @@ export const ZReportView: React.FC = () => {
         <div className="card-title-row" style={{ flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
           <div>
             <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>📋 თითოეული ოპერაცია ცალ-ცალკე</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><ClipboardList size={16} /> თითოეული ოპერაცია ცალ-ცალკე</span>
               <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 400 }}>
                 (სულ: {daySales.length})
               </span>
@@ -650,21 +656,21 @@ export const ZReportView: React.FC = () => {
               className={`disc-pill ${filterPaymentType === 'card' ? 'active' : ''}`}
               style={{ fontSize: '11.5px', padding: '4px 10px' }}
             >
-              💳 ბარათი ({daySales.filter(s => s.paymentMethod === 'card' && s.discountType !== 'free' && s.totalAmount > 0).length})
+              <CreditCard size={12} /> ბარათი ({daySales.filter(s => s.paymentMethod === 'card' && s.discountType !== 'free' && s.totalAmount > 0).length})
             </button>
             <button
               onClick={() => setFilterPaymentType('cash')}
               className={`disc-pill ${filterPaymentType === 'cash' ? 'active' : ''}`}
               style={{ fontSize: '11.5px', padding: '4px 10px' }}
             >
-              💵 ნაღდი ({daySales.filter(s => s.paymentMethod === 'cash' && s.discountType !== 'free' && s.totalAmount > 0).length})
+              <Banknote size={12} /> ნაღდი ({daySales.filter(s => s.paymentMethod === 'cash' && s.discountType !== 'free' && s.totalAmount > 0).length})
             </button>
             <button
               onClick={() => setFilterPaymentType('split')}
               className={`disc-pill ${filterPaymentType === 'split' ? 'active' : ''}`}
               style={{ fontSize: '11.5px', padding: '4px 10px' }}
             >
-              🔀 შერეული ({daySales.filter(s => s.paymentMethod === 'split' && s.discountType !== 'free' && s.totalAmount > 0).length})
+              <Shuffle size={12} /> შერეული ({daySales.filter(s => s.paymentMethod === 'split' && s.discountType !== 'free' && s.totalAmount > 0).length})
             </button>
             <button
               onClick={() => setFilterPaymentType('free')}
@@ -676,14 +682,14 @@ export const ZReportView: React.FC = () => {
                 color: filterPaymentType === 'free' ? '#FFFFFF' : undefined,
               }}
             >
-              🎁 უფასო ({daySales.filter(s => s.paymentMethod === 'free' || s.discountType === 'free' || s.totalAmount === 0).length})
+              <Gift size={12} /> უფასო ({daySales.filter(s => s.paymentMethod === 'free' || s.discountType === 'free' || s.totalAmount === 0).length})
             </button>
             <button
               onClick={() => setFilterPaymentType('discount')}
               className={`disc-pill ${filterPaymentType === 'discount' ? 'active' : ''}`}
               style={{ fontSize: '11.5px', padding: '4px 10px' }}
             >
-              🏷️ ფასდაკლებით ({daySales.filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4').length})
+              <Tag size={12} /> ფასდაკლებით ({daySales.filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4').length})
             </button>
           </div>
         </div>
@@ -743,12 +749,14 @@ export const ZReportView: React.FC = () => {
                           ))}
                         </div>
                         {sale.discountComment && (
-                          <div style={{ fontSize: '11px', color: isSaleFree ? '#C084FC' : '#10B981', marginTop: '3px' }}>
-                            {isSaleFree
-                              ? '🎁 უფასო'
-                              : sale.discountType === 'percent50'
-                              ? `🏷️ ფასდაკლება -50% (-${sale.discountAmount.toFixed(2)} ₾)`
-                              : `🏷️ ფასდაკლება (-${sale.discountAmount.toFixed(2)} ₾)`}: {sale.discountComment}
+                          <div style={{ fontSize: '11px', color: isSaleFree ? '#C084FC' : '#10B981', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {isSaleFree ? (
+                              <><Gift size={10} /> უფასო</>
+                            ) : sale.discountType === 'percent50' ? (
+                              <><Tag size={10} /> ფასდაკლება -50% (-{sale.discountAmount.toFixed(2)} ₾)</>
+                            ) : (
+                              <><Tag size={10} /> ფასდაკლება (-{sale.discountAmount.toFixed(2)} ₾)</>
+                            )}: {sale.discountComment}
                           </div>
                         )}
                         {sale.notes && (
@@ -767,13 +775,15 @@ export const ZReportView: React.FC = () => {
                             border: isSaleFree ? '1px solid rgba(168, 85, 247, 0.3)' : undefined,
                           }}
                         >
-                          {isSaleFree
-                            ? '🎁 უფასო'
-                            : sale.paymentMethod === 'card'
-                            ? '💳 ბარათი'
-                            : sale.paymentMethod === 'cash'
-                            ? '💵 ნაღდი'
-                            : `🔀 შერეული (${sale.splitDetails?.cashAmount || 0} ნაღდი + ${sale.splitDetails?.cardAmount || 0} ბარათი)`}
+                          {isSaleFree ? (
+                            <><Gift size={11} /> უფასო</>
+                          ) : sale.paymentMethod === 'card' ? (
+                            <><CreditCard size={11} /> ბარათი</>
+                          ) : sale.paymentMethod === 'cash' ? (
+                            <><Banknote size={11} /> ნაღდი</>
+                          ) : (
+                            <><Shuffle size={11} /> შერეული ({sale.splitDetails?.cashAmount || 0} ნაღდი + {sale.splitDetails?.cardAmount || 0} ბარათი)</>
+                          )}
                         </span>
                       </td>
                       <td>
@@ -793,8 +803,8 @@ export const ZReportView: React.FC = () => {
                             დაბრუნებული
                           </span>
                         ) : (
-                          <span style={{ color: '#10B981', fontSize: '11px', fontWeight: 600 }}>
-                            ✓ დასრულებული
+                          <span style={{ color: '#10B981', fontSize: '11px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Check size={11} /> დასრულებული
                           </span>
                         )}
                       </td>
@@ -806,7 +816,7 @@ export const ZReportView: React.FC = () => {
                             style={{ padding: '5px 10px', fontSize: '12px' }}
                             title="ოპერაციის რედაქტირება"
                           >
-                            ✏️ რედაქტირება
+                            <Pencil size={12} /> რედაქტირება
                           </button>
                           {!isRef && (
                             <button
@@ -818,7 +828,7 @@ export const ZReportView: React.FC = () => {
                               style={{ padding: '5px 10px', fontSize: '12px' }}
                               title="დაბრუნების გაფორმება"
                             >
-                              ↩ დაბრუნება
+                              <Undo2 size={12} /> დაბრუნება
                             </button>
                           )}
                         </div>
@@ -850,7 +860,7 @@ export const ZReportView: React.FC = () => {
                 </span>
               </div>
               <button onClick={() => setEditingSale(null)} className="close-btn">
-                ✕
+                <X size={16} />
               </button>
             </div>
 
@@ -983,7 +993,7 @@ export const ZReportView: React.FC = () => {
                     color: (editDiscountType === 'free' || editPaymentMethod === 'free') ? '#FFFFFF' : undefined,
                   }}
                 >
-                  🎁 უფასო
+                  <Gift size={13} /> უფასო
                 </button>
               </div>
 
@@ -1013,7 +1023,7 @@ export const ZReportView: React.FC = () => {
                   }}
                   className={`pay-tab ${editPaymentMethod === 'card' && editDiscountType !== 'free' ? 'active' : ''}`}
                 >
-                  💳 ბარათი
+                  <CreditCard size={13} /> ბარათი
                 </button>
                 <button
                   type="button"
@@ -1023,7 +1033,7 @@ export const ZReportView: React.FC = () => {
                   }}
                   className={`pay-tab ${editPaymentMethod === 'cash' && editDiscountType !== 'free' ? 'active' : ''}`}
                 >
-                  💵 ნაღდი
+                  <Banknote size={13} /> ნაღდი
                 </button>
                 <button
                   type="button"
@@ -1033,7 +1043,7 @@ export const ZReportView: React.FC = () => {
                   }}
                   className={`pay-tab ${editPaymentMethod === 'split' && editDiscountType !== 'free' ? 'active' : ''}`}
                 >
-                  🔀 შერეული
+                  <Shuffle size={13} /> შერეული
                 </button>
                 <button
                   type="button"
@@ -1047,7 +1057,7 @@ export const ZReportView: React.FC = () => {
                     color: (editPaymentMethod === 'free' || editDiscountType === 'free') ? '#FFFFFF' : undefined,
                   }}
                 >
-                  🎁 უფასო
+                  <Gift size={13} /> უფასო
                 </button>
               </div>
 
@@ -1090,6 +1100,7 @@ export const ZReportView: React.FC = () => {
                     type="button"
                     onClick={() => setEditCustomTotal(editAutoTotal.toFixed(2))}
                     style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
                       background: '#282E3A',
                       border: '1px solid #334155',
                       borderRadius: '6px',
@@ -1101,7 +1112,7 @@ export const ZReportView: React.FC = () => {
                     }}
                     title="ავტომატურად გამოთვლილი თანხის დაყენება"
                   >
-                    ↺ ავტო-გამოთვლა ({editAutoTotal.toFixed(2)} ₾)
+                    <RotateCcw size={11} /> ავტო-გამოთვლა ({editAutoTotal.toFixed(2)} ₾)
                   </button>
                 )}
               </div>
@@ -1135,8 +1146,8 @@ export const ZReportView: React.FC = () => {
                   </div>
                 )}
               </div>
-              <span style={{ fontSize: '11px', color: '#64748B', marginTop: '5px', display: 'block' }}>
-                💡 შეგიძლიათ ხელით ჩაწეროთ ნებისმიერი ფაქტობრივად მიღებული/შეტანილი თანხა.
+              <span style={{ fontSize: '11px', color: '#64748B', marginTop: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Lightbulb size={12} /> შეგიძლიათ ხელით ჩაწეროთ ნებისმიერი ფაქტობრივად მიღებული/შეტანილი თანხა.
               </span>
             </div>
 
@@ -1189,7 +1200,7 @@ export const ZReportView: React.FC = () => {
                 className="partner-min-btn-primary"
                 style={{ width: '100%', justifyContent: 'center', padding: '10px' }}
               >
-                💾 ცვლილებების შენახვა ჩეკში
+                <Save size={14} /> ცვლილებების შენახვა ჩეკში
               </button>
 
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -1200,7 +1211,7 @@ export const ZReportView: React.FC = () => {
                     className="partner-min-danger-btn"
                     style={{ flex: 1, justifyContent: 'center' }}
                   >
-                    ↩ დაბრუნების გაფორმება
+                    <Undo2 size={14} /> დაბრუნების გაფორმება
                   </button>
                 )}
                 <button
@@ -1209,7 +1220,7 @@ export const ZReportView: React.FC = () => {
                   className="partner-min-btn-outline"
                   style={{ color: '#EF4444', borderColor: '#EF4444' }}
                 >
-                  🗑️ ოპერაციის წაშლა
+                  <Trash2 size={13} /> ოპერაციის წაშლა
                 </button>
               </div>
             </div>

@@ -13,7 +13,7 @@ import {
   ExpenseCategory,
   EmployeeRole
 } from '@/types/admin';
-import { PartnerPoint, PartnerSale, PartnerWriteOff } from '@/types/partner';
+import { PartnerPoint, PartnerSale, PartnerWriteOff, PartnerPreorder } from '@/types/partner';
 import { 
   initialAdminPrograms, 
   initialAdminBlogPosts
@@ -55,6 +55,7 @@ interface AdminContextType {
   stocks: Record<string, Record<string, number>>;
   sales: PartnerSale[];
   writeOffs: PartnerWriteOff[];
+  preorders: PartnerPreorder[];
   blogPosts: AdminBlogPost[];
 
   // Financial calculations
@@ -155,6 +156,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
   const [stocks, setStocks] = useState<Record<string, Record<string, number>>>({});
   const [sales, setSales] = useState<PartnerSale[]>(initialServerSales);
   const [writeOffs, setWriteOffs] = useState<PartnerWriteOff[]>([]);
+  const [preorders, setPreorders] = useState<PartnerPreorder[]>([]);
   const [blogPosts, setBlogPosts] = useState<AdminBlogPost[]>(initialAdminBlogPosts);
 
   // Sync server props when available
@@ -329,6 +331,14 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
       } catch (e) {
         console.warn('Supabase writeoffs fetch error:', e);
       }
+
+      // 9. Fetch Preorders
+      try {
+        const dbPreorders = await partnerDbService.getPreorders();
+        if (dbPreorders) setPreorders(dbPreorders);
+      } catch (e) {
+        console.warn('Supabase preorders fetch error:', e);
+      }
     };
 
     fetchSupabaseData();
@@ -358,10 +368,19 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
         })
         .subscribe();
 
+      const preordersChannel = supabase
+        .channel('admin_preorders_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_preorders' }, async () => {
+          const freshPreorders = await partnerDbService.getPreorders();
+          if (freshPreorders) setPreorders(freshPreorders);
+        })
+        .subscribe();
+
       return () => {
         supabase.removeChannel(prodChannel);
         supabase.removeChannel(salesChannel);
         supabase.removeChannel(stocksChannel);
+        supabase.removeChannel(preordersChannel);
       };
     } catch (e) {
       console.warn('Realtime subscription error:', e);
@@ -1151,6 +1170,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
         writeOffs,
         createWriteOff,
         deleteWriteOff,
+        preorders,
         addExpense,
         deleteExpense,
         addSalaryRecord,

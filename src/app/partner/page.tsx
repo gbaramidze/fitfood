@@ -3,15 +3,16 @@
 import React, { useState } from 'react';
 import { usePartner } from '@/context/PartnerContext';
 import { PartnerHeader } from '@/components/partner/PartnerHeader';
-import { PosTerminalView } from '@/components/partner/PosTerminalView';
+import { PartnerSidebar } from '@/components/partner/PartnerSidebar';
+import { OperationsView } from '@/components/partner/OperationsView';
 import { ReceiptsHistoryView } from '@/components/partner/ReceiptsHistoryView';
-import { ShipmentsView } from '@/components/partner/ShipmentsView';
 import { ZReportView } from '@/components/partner/ZReportView';
+import { PreorderView } from '@/components/partner/PreorderView';
 import { PartnerLoginModal } from '@/components/partner/PartnerLoginModal';
 
 export default function PartnerPage() {
   const { isAuthenticated } = usePartner();
-  const [activeTab, setActiveTab] = useState<string>('pos');
+  const [activeTab, setActiveTab] = useState<string>('operations');
   const [isPinModalOpen, setIsPinModalOpen] = useState<boolean>(false);
 
   // If not authenticated yet, show full-screen auth with the point logos selection & PIN
@@ -29,19 +30,20 @@ export default function PartnerPage() {
   return (
     <div className="partner-minimal-workstation">
       {/* Topbar */}
-      <PartnerHeader
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        openPinModal={() => setIsPinModalOpen(true)}
-      />
+      <PartnerHeader openPinModal={() => setIsPinModalOpen(true)} />
 
-      {/* Main Workspace Area */}
-      <main className="partner-min-main">
-        {activeTab === 'pos' && <PosTerminalView />}
-        {activeTab === 'receipts' && <ReceiptsHistoryView />}
-        {activeTab === 'shipments' && <ShipmentsView />}
-        {activeTab === 'zreport' && <ZReportView />}
-      </main>
+      <div className="partner-min-body">
+        {/* Sidebar */}
+        <PartnerSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+
+        {/* Main Workspace Area */}
+        <main className="partner-min-main">
+          {activeTab === 'operations' && <OperationsView />}
+          {activeTab === 'receipts' && <ReceiptsHistoryView />}
+          {activeTab === 'preorder' && <PreorderView />}
+          {activeTab === 'zreport' && <ZReportView />}
+        </main>
+      </div>
 
       {/* PIN Modal on demand from header */}
       <PartnerLoginModal

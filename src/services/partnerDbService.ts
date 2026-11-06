@@ -5,6 +5,7 @@ import {
   PartnerSale,
   PartnerShipment,
   PartnerWriteOff,
+  PartnerPreorder,
 } from '@/types/partner';
 import { mapSupabaseProductToAdminDish } from '@/lib/adminDishMapper';
 import { getPointLogo } from '@/data/partnerData';
@@ -225,7 +226,38 @@ export const partnerDbService = {
         reason: w.reason,
         reasonText: w.reason_text,
         notes: w.notes,
+        costPrice: w.cost_price !== undefined && w.cost_price !== null ? Number(w.cost_price) : undefined,
+        retailPrice: w.retail_price !== undefined && w.retail_price !== null ? Number(w.retail_price) : undefined,
         createdAt: w.created_at,
+      }));
+    } catch {
+      return null;
+    }
+  },
+
+  // 7. Fetch Preorders
+  async getPreorders(): Promise<PartnerPreorder[] | null> {
+    if (!isSupabaseConfigured) return null;
+    try {
+      const { data, error } = await supabase.from('partner_preorders').select('*').order('created_at', { ascending: false });
+      if (error || !data) return null;
+      return data.map(p => ({
+        id: p.id,
+        pointId: p.point_id,
+        preorderNumber: p.preorder_number,
+        items: p.items,
+        originalAmount: Number(p.original_amount),
+        discountAmount: Number(p.discount_amount || 0),
+        totalAmount: Number(p.total_amount),
+        comment: p.comment,
+        pickupDate: p.pickup_date,
+        paymentMethod: p.payment_method,
+        sellerRole: p.seller_role,
+        status: p.status,
+        linkedSaleId: p.linked_sale_id,
+        createdAt: p.created_at,
+        fulfilledAt: p.fulfilled_at,
+        cancelledAt: p.cancelled_at,
       }));
     } catch {
       return null;
@@ -314,6 +346,8 @@ export const partnerDbService = {
         reason: writeOff.reason,
         reason_text: writeOff.reasonText,
         notes: writeOff.notes,
+        cost_price: writeOff.costPrice,
+        retail_price: writeOff.retailPrice,
         created_at: writeOff.createdAt,
       });
     } catch (e) {
@@ -327,6 +361,41 @@ export const partnerDbService = {
       await supabase.from('partner_write_offs').delete().eq('id', writeOffId);
     } catch (e) {
       console.warn('Error deleting write-off in Supabase:', e);
+    }
+  },
+
+  async savePreorder(preorder: PartnerPreorder) {
+    if (!isSupabaseConfigured) return;
+    try {
+      await supabase.from('partner_preorders').upsert({
+        id: preorder.id,
+        point_id: preorder.pointId,
+        preorder_number: preorder.preorderNumber,
+        items: preorder.items,
+        original_amount: preorder.originalAmount,
+        discount_amount: preorder.discountAmount,
+        total_amount: preorder.totalAmount,
+        comment: preorder.comment,
+        pickup_date: preorder.pickupDate,
+        payment_method: preorder.paymentMethod,
+        seller_role: preorder.sellerRole,
+        status: preorder.status,
+        linked_sale_id: preorder.linkedSaleId,
+        fulfilled_at: preorder.fulfilledAt,
+        cancelled_at: preorder.cancelledAt,
+        created_at: preorder.createdAt,
+      });
+    } catch (e) {
+      console.warn('Error saving preorder to Supabase:', e);
+    }
+  },
+
+  async deletePreorder(preorderId: string) {
+    if (!isSupabaseConfigured) return;
+    try {
+      await supabase.from('partner_preorders').delete().eq('id', preorderId);
+    } catch (e) {
+      console.warn('Error deleting preorder in Supabase:', e);
     }
   },
 

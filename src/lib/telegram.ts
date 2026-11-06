@@ -127,6 +127,130 @@ ${paymentMethodLabel}
 `.trim();
 }
 
+export function formatPreorderNotification(preorder: {
+  pointName: string;
+  preorderNumber?: string;
+  items: { productName: string; quantity: number; pricePerUnit: number; totalPrice: number }[];
+  originalAmount: number;
+  discountAmount?: number;
+  totalAmount: number;
+  comment: string;
+  pickupDate?: string;
+  paymentMethod: string;
+  sellerRole?: string;
+}): string {
+  const paymentMethodLabel =
+    preorder.paymentMethod === 'card' ? '💳 საბანკო ბარათი' : '💵 ნაღდი ფული';
+
+  const itemsList = preorder.items.map((it, idx) =>
+    `   ${idx + 1}. ${it.productName} - ${it.quantity} ც. × ${formatAmount(it.pricePerUnit)} ₾ = ${formatAmount(it.totalPrice)} ₾`
+  ).join('\n');
+
+  const timeStr = new Date().toLocaleString('ka-GE', {
+    timeZone: 'Asia/Tbilisi',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  return `
+📝 <b>ახალი წინასწარი შეკვეთა (Предзаказ)</b>
+━━━━━━━━━━━━━━━━━━━━━
+🏢 <b>წერტილი:</b> ${preorder.pointName}
+⏰ <b>დრო:</b> ${timeStr}
+📅 <b>გატანის თარიღი:</b> ${preorder.pickupDate || '—'}
+👤 <b>ვისთვის / კომენტარი:</b> ${preorder.comment}
+
+📦 <b>პოზიციები:</b>
+${itemsList}
+
+🏷️ <b>ფასდაკლება -50%:</b> -${formatAmount(preorder.discountAmount || 0)} ₾
+━━━━━━━━━━━━━━━━━━━━━
+<b>გადახდილი ავანსად:</b> ${preorder.totalAmount.toFixed(2)} ₾
+${paymentMethodLabel}
+`.trim();
+}
+
+export function formatShipmentNotification(shipment: {
+  pointName: string;
+  shipmentNumber?: string;
+  items: { productName: string; quantity: number }[];
+  totalUnits: number;
+  note?: string;
+  sellerRole?: string;
+}): string {
+  const itemsList = shipment.items.map((it, idx) =>
+    `   ${idx + 1}. ${it.productName} - +${it.quantity} ც.`
+  ).join('\n');
+
+  const timeStr = new Date().toLocaleString('ka-GE', {
+    timeZone: 'Asia/Tbilisi',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  return `
+📦 <b>მარაგის შევსება (Пополнение склада)</b>
+━━━━━━━━━━━━━━━━━━━━━
+🏢 <b>წერტილი:</b> ${shipment.pointName}
+⏰ <b>დრო:</b> ${timeStr}
+${shipment.shipmentNumber ? `🔖 <b>ზედნადები:</b> #${shipment.shipmentNumber}\n` : ''}
+📦 <b>პოზიციები:</b>
+${itemsList}
+${shipment.note ? `\n💬 <b>კომენტარი:</b> ${shipment.note}` : ''}
+━━━━━━━━━━━━━━━━━━━━━
+<b>სულ შევსებული:</b> +${shipment.totalUnits} ც.
+`.trim();
+}
+
+export function formatWriteOffNotification(writeOff: {
+  pointName: string;
+  items: { productName: string; quantity: number; totalValue?: number }[];
+  totalUnits: number;
+  totalValue?: number;
+  reasonText: string;
+  note?: string;
+  sellerRole?: string;
+}): string {
+  const itemsList = writeOff.items.map((it, idx) =>
+    `   ${idx + 1}. ${it.productName} - -${it.quantity} ც.${it.totalValue ? ` (-${formatAmount(it.totalValue)} ₾)` : ''}`
+  ).join('\n');
+
+  const timeStr = new Date().toLocaleString('ka-GE', {
+    timeZone: 'Asia/Tbilisi',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  return `
+🗑️ <b>ჩამოწერა (Списание)</b>
+━━━━━━━━━━━━━━━━━━━━━
+🏢 <b>წერტილი:</b> ${writeOff.pointName}
+⏰ <b>დრო:</b> ${timeStr}
+📋 <b>მიზეზი:</b> ${writeOff.reasonText}
+
+📦 <b>პოზიციები:</b>
+${itemsList}
+${writeOff.note ? `\n💬 <b>შენიშვნა:</b> ${writeOff.note}` : ''}
+━━━━━━━━━━━━━━━━━━━━━
+<b>სულ ჩამოწერილი:</b> -${writeOff.totalUnits} ც.${writeOff.totalValue ? ` (-${formatAmount(writeOff.totalValue)} ₾)` : ''}
+`.trim();
+}
+
 export function formatLeadNotification(lead: {
   customerName: string;
   phone: string;

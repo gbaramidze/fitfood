@@ -1,5 +1,6 @@
 import { PartnerSale } from '@/types/partner';
 import { PartnerPoint } from '@/types/partner';
+import { PartnerPreorder } from '@/types/partner';
 import { AdminDish } from '@/types/admin';
 import { COOK_CATEGORIES, isCookItem } from '@/lib/cookCommissionHelper';
 
@@ -16,6 +17,7 @@ export interface ForecastItem {
   categoryIcon: string;
   avgQuantity: number;
   recommendedQuantity: number;
+  preorderQuantity: number; // confirmed, paid-in-advance preorders for the target date
   trend: TrendDirection;
   trendPercent: number;
   dataPoints: number;
@@ -27,7 +29,9 @@ export interface PointForecast {
   pointName: string;
   pointAddress?: string;
   items: ForecastItem[];
-  totalRecommendedUnits: number;
+  totalRecommendedUnits: number; // organic forecast only
+  totalPreorderUnits: number;
+  totalUnitsToPrepare: number; // totalRecommendedUnits + totalPreorderUnits
   usingFallback: boolean;
   dataPointsUsed: number;
 }
@@ -81,13 +85,31 @@ export function computeSalesForecast(
   sales: PartnerSale[],
   points: PartnerPoint[],
   dishes: AdminDish[],
-  targetDate: Date = getTomorrow()
+  targetDate: Date = getTomorrow(),
+  preorders: PartnerPreorder[] = []
 ): SalesForecastResult {
   const targetWeekday = targetDate.getDay();
   const weekdayLabel = WEEKDAY_LABELS_KA[targetWeekday];
+  const targetDateKey = dayKeyOf(targetDate);
 
   const completedSales = sales.filter(s => s.status === 'completed' && Array.isArray(s.items));
   const activePoints = points.filter(p => p.status === 'active');
+
+  // Confirmed, paid-in-advance preorders due for pickup on the target date, grouped by point then product key.
+  const preordersByPoint: Record<string, Record<string, { qty: number; productName: string; productId?: string }>> = {};
+  preorders
+    .filter(p => p.status === 'pending' && p.pickupDate === targetDateKey)
+    .forEach(p => {
+      if (!preordersByPoint[p.pointId]) preordersByPoint[p.pointId] = {};
+      p.items.forEach(it => {
+        const key = it.productId || (it.productName || '').trim().toLowerCase();
+        if (!key) return;
+        if (!preordersByPoint[p.pointId][key]) {
+          preordersByPoint[p.pointId][key] = { qty: 0, productName: it.productName || 'უცნობი პოზიცია', productId: it.productId };
+        }
+        preordersByPoint[p.pointId][key].qty += Number(it.quantity) || 0;
+      });
+    });
 
   const pointForecasts: PointForecast[] = activePoints.map(point => {
     const pointSales = completedSales.filter(s => s.pointId === point.id);
@@ -171,6 +193,7 @@ export function computeSalesForecast(
         categoryIcon: resolveItemIcon(sample.productId, sample.productName, dishes),
         avgQuantity: Math.round(avgQty * 10) / 10,
         recommendedQuantity,
+        preorderQuantity: 0,
         trend,
         trendPercent,
         dataPoints: series.filter(q => q > 0).length,
@@ -178,14 +201,45 @@ export function computeSalesForecast(
       });
     });
 
-    items.sort((a, b) => b.recommendedQuantity - a.recommendedQuantity);
+    // Fold in confirmed preorders due on the target date: add to matching items,
+    // and surface any preordered product that has no organic sales history yet.
+    const pointPreorders = preordersByPoint[point.id];
+    if (pointPreorders) {
+      Object.entries(pointPreorders).forEach(([key, po]) => {
+        const existing = items.find(i => i.key === key);
+        if (existing) {
+          existing.preorderQuantity += po.qty;
+        } else {
+          items.push({
+            key,
+            productId: po.productId,
+            productName: po.productName,
+            categoryIcon: resolveItemIcon(po.productId, po.productName, dishes),
+            avgQuantity: 0,
+            recommendedQuantity: 0,
+            preorderQuantity: po.qty,
+            trend: 'stable',
+            trendPercent: 0,
+            dataPoints: 0,
+            confidence: 'high',
+          });
+        }
+      });
+    }
+
+    items.sort((a, b) => (b.recommendedQuantity + b.preorderQuantity) - (a.recommendedQuantity + a.preorderQuantity));
+
+    const totalRecommendedUnits = items.reduce((sum, i) => sum + i.recommendedQuantity, 0);
+    const totalPreorderUnits = items.reduce((sum, i) => sum + i.preorderQuantity, 0);
 
     return {
       pointId: point.id,
       pointName: point.name.ka,
       pointAddress: point.address?.ka,
       items,
-      totalRecommendedUnits: items.reduce((sum, i) => sum + i.recommendedQuantity, 0),
+      totalRecommendedUnits,
+      totalPreorderUnits,
+      totalUnitsToPrepare: totalRecommendedUnits + totalPreorderUnits,
       usingFallback,
       dataPointsUsed: relevantDayKeys.length,
     };

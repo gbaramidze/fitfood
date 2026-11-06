@@ -1,13 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  PartnerPoint, 
-  PartnerProduct, 
-  PartnerRole, 
-  PartnerSale, 
-  PartnerShipment, 
-  PartnerWriteOff 
+import {
+  PartnerPoint,
+  PartnerProduct,
+  PartnerRole,
+  PartnerSale,
+  PartnerShipment,
+  PartnerWriteOff,
+  PartnerPreorder
 } from '@/types/partner';
 import { 
   initialPartnerPoints, 
@@ -18,6 +19,33 @@ import {
 } from '@/data/partnerData';
 import { partnerDbService, sortPartnerProducts } from '@/services/partnerDbService';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+
+interface CreatePreorderParams {
+  pointId: string;
+  items: { product: PartnerProduct; quantity: number }[];
+  comment: string;
+  pickupDate?: string; // YYYY-MM-DD, defaults to tomorrow if omitted
+  paymentMethod: 'card' | 'cash';
+}
+
+interface EditPreorderParams {
+  preorderId: string;
+  items?: { product: PartnerProduct; quantity: number }[];
+  comment?: string;
+  pickupDate?: string;
+  paymentMethod?: 'card' | 'cash';
+}
+
+// YYYY-MM-DD for N days from today (Tbilisi local date)
+const getTbilisiDateStr = (daysFromToday: number): string => {
+  const now = new Date();
+  const tbilisiNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tbilisi' }));
+  tbilisiNow.setDate(tbilisiNow.getDate() + daysFromToday);
+  const y = tbilisiNow.getFullYear();
+  const m = String(tbilisiNow.getMonth() + 1).padStart(2, '0');
+  const d = String(tbilisiNow.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 interface CompleteSaleParams {
   pointId: string;
@@ -53,6 +81,7 @@ interface PartnerContextType {
   shipments: PartnerShipment[];
   sales: PartnerSale[];
   writeOffs: PartnerWriteOff[];
+  preorders: PartnerPreorder[];
 
   // Session actions
   loginWithPin: (pointId: string, pin: string) => { success: boolean; role?: PartnerRole; message?: string };
@@ -66,6 +95,16 @@ interface PartnerContextType {
   deleteSale: (saleId: string, returnStockToShelf?: boolean) => boolean;
   refundSale: (saleId: string, reason?: string) => boolean;
   createWriteOff: (pointId: string, productId: string, quantity: number, reason: 'expired' | 'damaged' | 'sample' | 'other', note?: string) => boolean;
+  notifyWriteOffBatch: (pointId: string, items: { productName: string; quantity: number; totalValue?: number }[], reasonText: string, note?: string) => void;
+
+  // Preorder actions (paid in advance with -50%, not deducted from stock until fulfilled)
+  createPreorder: (params: CreatePreorderParams) => PartnerPreorder;
+  editPreorder: (params: EditPreorderParams) => boolean;
+  fulfillPreorder: (preorderId: string) => boolean;
+  cancelPreorder: (preorderId: string, reason?: string) => boolean;
+  deletePreorder: (preorderId: string) => boolean;
+  getPointPreorders: (pointId: string) => PartnerPreorder[];
+  getTomorrowDateStr: () => string;
 
   // HQ Admin & Point actions
   createShipment: (pointId: string, items: { productId: string; quantity: number }[], note?: string) => PartnerShipment;
@@ -89,6 +128,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [shipments, setShipments] = useState<PartnerShipment[]>(initialShipments);
   const [sales, setSales] = useState<PartnerSale[]>(initialSales);
   const [writeOffs, setWriteOffs] = useState<PartnerWriteOff[]>(initialWriteOffs);
+  const [preorders, setPreorders] = useState<PartnerPreorder[]>([]);
 
   const [currentPoint, setCurrentPoint] = useState<PartnerPoint | null>(initialPartnerPoints[0]);
   const [currentRole, setCurrentRole] = useState<PartnerRole>('manager');
@@ -150,6 +190,14 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (dbWriteOffs) setWriteOffs(dbWriteOffs);
     } catch (e) {
       console.warn('Supabase writeoffs fetch error:', e);
+    }
+
+    // 7. Preorders
+    try {
+      const dbPreorders = await partnerDbService.getPreorders();
+      if (dbPreorders) setPreorders(dbPreorders);
+    } catch (e) {
+      console.warn('Supabase preorders fetch error:', e);
     }
   };
 
@@ -214,6 +262,10 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_shipments' }, async () => {
           const freshShip = await partnerDbService.getShipments();
           if (freshShip) setShipments(freshShip);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_preorders' }, async () => {
+          const freshPreorders = await partnerDbService.getPreorders();
+          if (freshPreorders) setPreorders(freshPreorders);
         })
         .subscribe();
 
@@ -594,22 +646,24 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!prod) return false;
 
     const reasonMap: Record<string, string> = {
-      expired: 'Истек срок годности (72ч)',
-      damaged: 'Повреждение упаковки / брак',
-      sample: 'Дегустация / маркетинг',
-      other: 'Прочее',
+      expired: 'ვადაგასული (72სთ)',
+      damaged: 'შეფუთვის დაზიანება / ბრაკი',
+      sample: 'დეგუსტაცია / მარკეტინგი',
+      other: 'სხვა',
     };
 
     const newWriteOff: PartnerWriteOff = {
-      id: `wro-${Date.now()}`,
+      id: `wro-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       pointId,
       productId,
-      productName: prod.name.ru,
+      productName: prod.name.ka || prod.name.ru,
       quantity,
       reason,
-      reasonText: reasonMap[reason] || 'Списание',
+      reasonText: reasonMap[reason] || 'ჩამოწერა',
       createdAt: new Date().toISOString(),
       notes: note,
+      costPrice: prod.costPrice,
+      retailPrice: prod.price,
     };
 
     setStocks(prev => {
@@ -625,6 +679,286 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     partnerDbService.saveWriteOff(newWriteOff);
     return true;
   };
+
+  // Send one aggregated Telegram notification for a batch of write-offs created via createWriteOff
+  // (createWriteOff itself only handles a single product, so the UI calls this once per checkout).
+  const notifyWriteOffBatch = (
+    pointId: string,
+    items: { productName: string; quantity: number; totalValue?: number }[],
+    reasonText: string,
+    note?: string
+  ) => {
+    try {
+      const currentPointObj = points.find(p => p.id === pointId);
+      const pointName = currentPointObj ? (currentPointObj.name.ka || currentPointObj.name.ru) : pointId;
+      const totalUnits = items.reduce((s, i) => s + i.quantity, 0);
+      const totalValue = items.reduce((s, i) => s + (i.totalValue || 0), 0);
+
+      fetch('/api/telegram/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'writeoff',
+          data: {
+            pointName,
+            items,
+            totalUnits,
+            totalValue: totalValue > 0 ? totalValue : undefined,
+            reasonText,
+            note,
+            sellerRole: currentRole === 'manager' ? 'manager' : 'cashier',
+          },
+        }),
+      }).catch(err => console.warn('Telegram notify error:', err));
+    } catch (e) {
+      console.warn('Telegram call failed:', e);
+    }
+  };
+
+  // Create a preorder: customer reserves dishes & pays 50% upfront. Stock is NOT touched yet —
+  // it is only deducted once the preorder is fulfilled (picked up) via fulfillPreorder().
+  const createPreorder = ({
+    pointId,
+    items,
+    comment,
+    pickupDate,
+    paymentMethod,
+  }: CreatePreorderParams): PartnerPreorder => {
+    const preorderItems = items.map(item => ({
+      productId: item.product.id,
+      productName: item.product.name.ka || item.product.name.ru || item.product.name.en,
+      quantity: item.quantity,
+      pricePerUnit: item.product.price,
+      totalPrice: item.product.price * item.quantity,
+    }));
+
+    const originalAmount = preorderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    const discountAmount = Math.round((originalAmount * 0.5) * 100) / 100;
+    const totalAmount = Math.max(0, originalAmount - discountAmount);
+    const preorderId = `preorder-${Date.now()}`;
+    const preorderNumber = `PRE-${Math.floor(1000 + Math.random() * 9000)}`;
+    const nowIso = new Date().toISOString();
+    const sellerRole: 'cashier' | 'manager' = currentRole === 'manager' ? 'manager' : 'cashier';
+
+    // The advance payment was collected right now, in cash/card, at the register —
+    // so it's recorded as a completed sale immediately and counts toward THIS shift's
+    // revenue totals (Z-report), without touching stock (that happens on fulfillment).
+    const linkedSaleId = `sale-preorder-${preorderId}`;
+    const linkedSale: PartnerSale = {
+      id: linkedSaleId,
+      pointId,
+      receiptNumber: preorderNumber,
+      items: preorderItems,
+      originalAmount,
+      discountAmount,
+      discountType: 'percent50',
+      discountComment: `📝 წინასწარი შეკვეთის ავანსი • ${comment.trim()}`,
+      totalAmount,
+      paymentMethod,
+      sellerRole,
+      createdAt: nowIso,
+      notes: `PREORDER_ADVANCE:${preorderId}`,
+      status: 'completed',
+    };
+
+    const newPreorder: PartnerPreorder = {
+      id: preorderId,
+      pointId,
+      preorderNumber,
+      items: preorderItems,
+      originalAmount,
+      discountAmount,
+      totalAmount,
+      comment: comment.trim(),
+      pickupDate: pickupDate && pickupDate >= getTbilisiDateStr(1) ? pickupDate : getTbilisiDateStr(1),
+      paymentMethod,
+      sellerRole,
+      status: 'pending',
+      linkedSaleId,
+      createdAt: nowIso,
+    };
+
+    setSales(prev => [linkedSale, ...prev]);
+    partnerDbService.saveSale(linkedSale);
+
+    setPreorders(prev => [newPreorder, ...prev]);
+    partnerDbService.savePreorder(newPreorder);
+
+    // Send Telegram Channel Notification
+    try {
+      const currentPointObj = points.find(p => p.id === pointId);
+      const pointName = currentPointObj ? (currentPointObj.name.ka || currentPointObj.name.ru) : pointId;
+
+      fetch('/api/telegram/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'preorder',
+          data: {
+            pointName,
+            preorderNumber: newPreorder.preorderNumber,
+            items: newPreorder.items,
+            originalAmount: newPreorder.originalAmount,
+            discountAmount: newPreorder.discountAmount,
+            totalAmount: newPreorder.totalAmount,
+            comment: newPreorder.comment,
+            pickupDate: newPreorder.pickupDate,
+            paymentMethod: newPreorder.paymentMethod,
+            sellerRole: newPreorder.sellerRole,
+          },
+        }),
+      }).catch(err => console.warn('Telegram notify error:', err));
+    } catch (e) {
+      console.warn('Telegram call failed:', e);
+    }
+
+    return newPreorder;
+  };
+
+  // Mark a preorder as fulfilled (customer picked it up) — deducts items from shelf stock now.
+  const fulfillPreorder = (preorderId: string): boolean => {
+    const target = preorders.find(p => p.id === preorderId);
+    if (!target || target.status !== 'pending') return false;
+
+    const pointId = target.pointId;
+    setStocks(prev => {
+      const pointStock = { ...(prev[pointId] || {}) };
+      target.items.forEach(it => {
+        const currentQty = pointStock[it.productId] !== undefined ? pointStock[it.productId] : getPointStock(pointId, it.productId);
+        const newQty = Math.max(0, currentQty - it.quantity);
+        pointStock[it.productId] = newQty;
+        partnerDbService.updateStock(pointId, it.productId, newQty);
+      });
+      return { ...prev, [pointId]: pointStock };
+    });
+
+    const updated: PartnerPreorder = {
+      ...target,
+      status: 'fulfilled',
+      fulfilledAt: new Date().toISOString(),
+    };
+
+    setPreorders(prev => prev.map(p => (p.id === preorderId ? updated : p)));
+    partnerDbService.savePreorder(updated);
+    return true;
+  };
+
+  // Cancel a pending preorder (e.g. customer never showed up) — no stock was deducted, nothing to return.
+  // The advance payment is refunded (marked refunded on its linked sale, no stock change) so it
+  // stops counting toward revenue, matching the fact that the order was never fulfilled.
+  const cancelPreorder = (preorderId: string, reason?: string): boolean => {
+    const target = preorders.find(p => p.id === preorderId);
+    if (!target || target.status !== 'pending') return false;
+
+    if (target.linkedSaleId) {
+      const refundedAt = new Date().toISOString();
+      setSales(prev =>
+        prev.map(s =>
+          s.id === target.linkedSaleId
+            ? { ...s, status: 'refunded', refundReason: reason || 'წინასწარი შეკვეთის გაუქმება', refundedAt }
+            : s
+        )
+      );
+      const linkedSale = sales.find(s => s.id === target.linkedSaleId);
+      if (linkedSale) {
+        partnerDbService.saveSale({ ...linkedSale, status: 'refunded', refundReason: reason || 'წინასწარი შეკვეთის გაუქმება', refundedAt });
+      }
+    }
+
+    const updated: PartnerPreorder = {
+      ...target,
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+      comment: reason ? `${target.comment} • გაუქმდა: ${reason}` : target.comment,
+    };
+
+    setPreorders(prev => prev.map(p => (p.id === preorderId ? updated : p)));
+    partnerDbService.savePreorder(updated);
+    return true;
+  };
+
+  // Hard-delete a preorder record together with its linked advance-payment sale.
+  const deletePreorder = (preorderId: string): boolean => {
+    const target = preorders.find(p => p.id === preorderId);
+
+    if (target?.linkedSaleId) {
+      setSales(prev => prev.filter(s => s.id !== target.linkedSaleId));
+      partnerDbService.deleteSale(target.linkedSaleId);
+    }
+
+    setPreorders(prev => prev.filter(p => p.id !== preorderId));
+    partnerDbService.deletePreorder(preorderId);
+    return true;
+  };
+
+  // Edit a pending preorder (items, comment, pickup date, payment method) and keep its
+  // linked advance-payment sale in sync so the shift's revenue totals stay accurate.
+  const editPreorder = ({
+    preorderId,
+    items,
+    comment,
+    pickupDate,
+    paymentMethod,
+  }: EditPreorderParams): boolean => {
+    const target = preorders.find(p => p.id === preorderId);
+    if (!target || target.status !== 'pending') return false;
+
+    const newItems = items
+      ? items.map(item => ({
+          productId: item.product.id,
+          productName: item.product.name.ka || item.product.name.ru || item.product.name.en,
+          quantity: item.quantity,
+          pricePerUnit: item.product.price,
+          totalPrice: item.product.price * item.quantity,
+        }))
+      : target.items;
+
+    const originalAmount = newItems.reduce((sum, it) => sum + it.totalPrice, 0);
+    const discountAmount = Math.round((originalAmount * 0.5) * 100) / 100;
+    const totalAmount = Math.max(0, originalAmount - discountAmount);
+    const finalComment = comment !== undefined ? comment.trim() : target.comment;
+    const finalPickupDate = pickupDate && pickupDate >= getTbilisiDateStr(1) ? pickupDate : target.pickupDate;
+    const finalPaymentMethod = paymentMethod || target.paymentMethod;
+
+    const updated: PartnerPreorder = {
+      ...target,
+      items: newItems,
+      originalAmount,
+      discountAmount,
+      totalAmount,
+      comment: finalComment,
+      pickupDate: finalPickupDate,
+      paymentMethod: finalPaymentMethod,
+    };
+
+    setPreorders(prev => prev.map(p => (p.id === preorderId ? updated : p)));
+    partnerDbService.savePreorder(updated);
+
+    if (target.linkedSaleId) {
+      const linkedSale = sales.find(s => s.id === target.linkedSaleId);
+      if (linkedSale) {
+        const updatedSale: PartnerSale = {
+          ...linkedSale,
+          items: newItems,
+          originalAmount,
+          discountAmount,
+          totalAmount,
+          discountComment: `📝 წინასწარი შეკვეთის ავანსი • ${finalComment}`,
+          paymentMethod: finalPaymentMethod,
+        };
+        setSales(prev => prev.map(s => (s.id === target.linkedSaleId ? updatedSale : s)));
+        partnerDbService.saveSale(updatedSale);
+      }
+    }
+
+    return true;
+  };
+
+  const getPointPreorders = (pointId: string): PartnerPreorder[] => {
+    return preorders.filter(p => p.pointId === pointId);
+  };
+
+  const getTomorrowDateStr = (): string => getTbilisiDateStr(1);
 
   // HQ Admin or Point Manager receives food to a point: AUTOMATICALLY CREDITS STOCK IMMEDIATELY!
   const createShipment = (
@@ -670,6 +1004,31 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setShipments(prev => [newShipment, ...prev]);
     partnerDbService.saveShipment(newShipment);
+
+    // Send Telegram Channel Notification
+    try {
+      const currentPointObj = points.find(p => p.id === pointId);
+      const pointName = currentPointObj ? (currentPointObj.name.ka || currentPointObj.name.ru) : pointId;
+
+      fetch('/api/telegram/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'shipment',
+          data: {
+            pointName,
+            shipmentNumber: newShipment.shipmentNumber,
+            items: newShipment.items,
+            totalUnits: newShipment.totalUnits,
+            note: newShipment.note,
+            sellerRole: currentRole === 'manager' ? 'manager' : 'cashier',
+          },
+        }),
+      }).catch(err => console.warn('Telegram notify error:', err));
+    } catch (e) {
+      console.warn('Telegram call failed:', e);
+    }
+
     return newShipment;
   };
 
@@ -711,6 +1070,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setShipments(initialShipments);
     setSales(initialSales);
     setWriteOffs(initialWriteOffs);
+    setPreorders([]);
     setCurrentPoint(initialPartnerPoints[0]);
     setCurrentRole('manager');
     setIsAuthenticated(true);
@@ -728,6 +1088,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         shipments,
         sales,
         writeOffs,
+        preorders,
         loginWithPin,
         switchRole,
         selectPoint,
@@ -737,6 +1098,14 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteSale,
         refundSale,
         createWriteOff,
+        notifyWriteOffBatch,
+        createPreorder,
+        editPreorder,
+        fulfillPreorder,
+        cancelPreorder,
+        deletePreorder,
+        getPointPreorders,
+        getTomorrowDateStr,
         createShipment,
         quickRestockPoint,
         addNewPoint,

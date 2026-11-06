@@ -18,7 +18,7 @@ function formatLongDateKa(d: Date, weekdayLabel: string): string {
 }
 
 export const AdminSalesForecast: React.FC = () => {
-  const { sales, points, dishes } = useAdmin();
+  const { sales, points, dishes, preorders } = useAdmin();
   const [targetDateStr, setTargetDateStr] = useState<string>(() => formatDateInput(getTomorrow()));
   const [copiedPointId, setCopiedPointId] = useState<string | null>(null);
 
@@ -30,12 +30,13 @@ export const AdminSalesForecast: React.FC = () => {
   }, [targetDateStr]);
 
   const forecast = useMemo(
-    () => computeSalesForecast(sales, points, dishes, targetDate),
-    [sales, points, dishes, targetDate]
+    () => computeSalesForecast(sales, points, dishes, targetDate, preorders),
+    [sales, points, dishes, targetDate, preorders]
   );
 
   const pointsWithData = forecast.points.filter(p => p.items.length > 0);
-  const grandTotalUnits = pointsWithData.reduce((sum, p) => sum + p.totalRecommendedUnits, 0);
+  const grandTotalUnits = pointsWithData.reduce((sum, p) => sum + p.totalUnitsToPrepare, 0);
+  const grandTotalPreorderUnits = pointsWithData.reduce((sum, p) => sum + p.totalPreorderUnits, 0);
   const lowConfidencePointsCount = pointsWithData.filter(p => p.usingFallback).length;
 
   const handleSetTomorrow = () => setTargetDateStr(formatDateInput(getTomorrow()));
@@ -43,7 +44,12 @@ export const AdminSalesForecast: React.FC = () => {
   const handleCopyPointList = (point: PointForecast) => {
     const lines = [
       `მომზადების გეგმა — ${point.pointName} (${targetDate.toLocaleDateString('ka-GE')})`,
-      ...point.items.map(it => `${it.productName} — ${it.recommendedQuantity} ცალი`),
+      ...point.items.map(it => {
+        const total = it.recommendedQuantity + it.preorderQuantity;
+        return it.preorderQuantity > 0
+          ? `${it.productName} — ${total} ცალი (მათ შორის ${it.preorderQuantity} წინასწარი შეკვეთით)`
+          : `${it.productName} — ${total} ცალი`;
+      }),
     ];
     navigator.clipboard?.writeText(lines.join('\n'));
     setCopiedPointId(point.pointId);
@@ -99,12 +105,25 @@ export const AdminSalesForecast: React.FC = () => {
       <div className="admin-kpi-grid">
         <div className="admin-kpi-card card-revenue">
           <div className="kpi-header">
-            <span className="kpi-title">სულ რეკომენდებული ულუფები</span>
+            <span className="kpi-title">სულ მოსამზადებელი ულუფები</span>
             <span className="kpi-icon">🍱</span>
           </div>
           <div className="kpi-value text-success">{grandTotalUnits} ცალი</div>
-          <div className="kpi-footer-note">ყველა აქტიურ ობიექტზე ჯამში</div>
+          <div className="kpi-footer-note">
+            პროგნოზი + წინასწარი შეკვეთები, ყველა აქტიურ ობიექტზე ჯამში
+          </div>
         </div>
+
+        {grandTotalPreorderUnits > 0 && (
+          <div className="admin-kpi-card" style={{ borderColor: 'rgba(236, 72, 153, 0.35)' }}>
+            <div className="kpi-header">
+              <span className="kpi-title" style={{ color: '#EC4899' }}>📝 წინასწარი შეკვეთებით</span>
+              <span className="kpi-icon">🏷️</span>
+            </div>
+            <div className="kpi-value" style={{ color: '#EC4899' }}>{grandTotalPreorderUnits} ცალი</div>
+            <div className="kpi-footer-note">გადახდილია ავანსად, გარანტირებულია</div>
+          </div>
+        )}
 
         <div className="admin-kpi-card">
           <div className="kpi-header">
@@ -149,7 +168,12 @@ export const AdminSalesForecast: React.FC = () => {
                 </p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <span className="admin-header-stats-pill">სულ: <b>{point.totalRecommendedUnits} ცალი</b></span>
+                <span className="admin-header-stats-pill">სულ: <b>{point.totalUnitsToPrepare} ცალი</b></span>
+                {point.totalPreorderUnits > 0 && (
+                  <span className="admin-header-stats-pill" style={{ color: '#EC4899' }}>
+                    📝 წინასწარი: <b>{point.totalPreorderUnits} ცალი</b>
+                  </span>
+                )}
                 <button onClick={() => handleCopyPointList(point)} className="admin-btn-secondary">
                   {copiedPointId === point.pointId ? '✓ დაკოპირდა!' : '📋 სიის კოპირება'}
                 </button>
@@ -164,6 +188,7 @@ export const AdminSalesForecast: React.FC = () => {
                     <th>საშ. გაყიდვა (დღეში)</th>
                     <th>ტენდენცია</th>
                     <th>სანდოობა</th>
+                    <th>წინასწარი შეკვეთა</th>
                     <th>მოამზადეთ</th>
                   </tr>
                 </thead>
@@ -177,7 +202,14 @@ export const AdminSalesForecast: React.FC = () => {
                         {confidenceLabel(item.confidence)}{' '}
                         <span style={{ fontSize: '11px', color: '#6B7280' }}>({item.dataPoints} დღე)</span>
                       </td>
-                      <td><b className="text-success" style={{ fontSize: '15px' }}>{item.recommendedQuantity} ცალი</b></td>
+                      <td>
+                        {item.preorderQuantity > 0 ? (
+                          <span style={{ color: '#EC4899', fontWeight: 700 }}>📝 {item.preorderQuantity} ცალი</span>
+                        ) : (
+                          <span style={{ color: '#6B7280' }}>—</span>
+                        )}
+                      </td>
+                      <td><b className="text-success" style={{ fontSize: '15px' }}>{item.recommendedQuantity + item.preorderQuantity} ცალი</b></td>
                     </tr>
                   ))}
                 </tbody>

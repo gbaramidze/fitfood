@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { usePartner } from '@/context/PartnerContext';
 import { PartnerSale } from '@/types/partner';
 import { IconClose } from '@/components/Icons';
+import { Receipt, Search, X, Check, CreditCard, Banknote, Shuffle, Gift, Tag, Pencil, Undo2 } from 'lucide-react';
 
 export const ReceiptsHistoryView: React.FC = () => {
   const { currentPoint, sales, refundSale, editSale } = usePartner();
@@ -110,15 +111,13 @@ export const ReceiptsHistoryView: React.FC = () => {
       {/* Header */}
       <div className="partner-min-head">
         <div>
-          <h2>📋 დღევანდელი ჩეკების ისტორია & დაბრუნება</h2>
+          <h2><Receipt size={18} /> დღევანდელი ჩეკების ისტორია & დაბრუნება</h2>
           <p>{currentPoint.name.ka} • გატარებული ოპერაციები, გადახდის ტიპები და ფასდაკლებები</p>
         </div>
 
         {/* Search */}
         <div style={{ position: 'relative', width: '300px' }}>
-          <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748B', fontSize: '13px' }}>
-            🔍
-          </span>
+          <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748B' }} />
           <input
             type="text"
             placeholder="ძებნა (ჩეკი, რაციონი, კომენტარი)..."
@@ -148,9 +147,10 @@ export const ReceiptsHistoryView: React.FC = () => {
                 color: '#94A3B8',
                 cursor: 'pointer',
                 fontSize: '12px',
+                display: 'flex',
               }}
             >
-              ✕
+              <X size={12} />
             </button>
           )}
         </div>
@@ -158,7 +158,7 @@ export const ReceiptsHistoryView: React.FC = () => {
 
       {alertMsg && (
         <div className="partner-min-alert" style={{ marginTop: '12px' }}>
-          <span>✓ {alertMsg}</span>
+          <span><Check size={14} /> {alertMsg}</span>
         </div>
       )}
 
@@ -183,25 +183,25 @@ export const ReceiptsHistoryView: React.FC = () => {
         </div>
 
         <div className="partner-min-kpi">
-          <span className="label">💳 ბარათით</span>
+          <span className="label"><CreditCard size={12} /> ბარათით</span>
           <strong className="value" style={{ color: '#38BDF8' }}>{cardRevenue} ₾</strong>
           <span className="sub">POS ტერმინალი</span>
         </div>
 
         <div className="partner-min-kpi">
-          <span className="label">💵 ნაღდით</span>
+          <span className="label"><Banknote size={12} /> ნაღდით</span>
           <strong className="value" style={{ color: '#FBBF24' }}>{cashRevenue} ₾</strong>
           <span className="sub">ნაღდი ფული</span>
         </div>
 
         <div className="partner-min-kpi">
-          <span className="label">🎁 უფასო რაციონი</span>
+          <span className="label"><Gift size={12} /> უფასო რაციონი</span>
           <strong className="value" style={{ color: '#A855F7' }}>{freeItemsCount} ც.</strong>
           <span className="sub">პრომო / მწვრთნელები</span>
         </div>
 
         <div className="partner-min-kpi">
-          <span className="label">🏷️ ფასდაკლება</span>
+          <span className="label"><Tag size={12} /> ფასდაკლება</span>
           <strong className="value" style={{ color: '#EC4899' }}>-{totalDiscountsGiven} ₾</strong>
           <span className="sub">სულ დაკლებული</span>
         </div>
@@ -228,6 +228,7 @@ export const ReceiptsHistoryView: React.FC = () => {
         <button
           onClick={() => setFilterType('card')}
           style={{
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
             background: filterType === 'card' ? '#38BDF8' : '#181B22',
             color: filterType === 'card' ? '#090A0F' : '#94A3B8',
             border: '1px solid #282E3A',
@@ -238,12 +239,13 @@ export const ReceiptsHistoryView: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          💳 ბარათით ({pointTodaySales.filter(s => s.paymentMethod === 'card' && s.discountType !== 'free' && s.totalAmount > 0).length})
+          <CreditCard size={13} /> ბარათით ({pointTodaySales.filter(s => s.paymentMethod === 'card' && s.discountType !== 'free' && s.totalAmount > 0).length})
         </button>
 
         <button
           onClick={() => setFilterType('cash')}
           style={{
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
             background: filterType === 'cash' ? '#FBBF24' : '#181B22',
             color: filterType === 'cash' ? '#090A0F' : '#94A3B8',
             border: '1px solid #282E3A',
@@ -254,12 +256,13 @@ export const ReceiptsHistoryView: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          💵 ნაღდით ({pointTodaySales.filter(s => s.paymentMethod === 'cash' && s.discountType !== 'free' && s.totalAmount > 0).length})
+          <Banknote size={13} /> ნაღდით ({pointTodaySales.filter(s => s.paymentMethod === 'cash' && s.discountType !== 'free' && s.totalAmount > 0).length})
         </button>
 
         <button
           onClick={() => setFilterType('split')}
           style={{
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
             background: filterType === 'split' ? '#E2E8F0' : '#181B22',
             color: filterType === 'split' ? '#090A0F' : '#94A3B8',
             border: '1px solid #282E3A',
@@ -270,12 +273,13 @@ export const ReceiptsHistoryView: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          🔀 შერეული ({pointTodaySales.filter(s => s.paymentMethod === 'split' && s.discountType !== 'free' && s.totalAmount > 0).length})
+          <Shuffle size={13} /> შერეული ({pointTodaySales.filter(s => s.paymentMethod === 'split' && s.discountType !== 'free' && s.totalAmount > 0).length})
         </button>
 
         <button
           onClick={() => setFilterType('free')}
           style={{
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
             background: filterType === 'free' ? '#A855F7' : '#181B22',
             color: filterType === 'free' ? '#FFFFFF' : '#94A3B8',
             border: '1px solid #282E3A',
@@ -286,12 +290,13 @@ export const ReceiptsHistoryView: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          🎁 უფასო ({pointTodaySales.filter(s => s.paymentMethod === 'free' || s.discountType === 'free' || s.totalAmount === 0).length})
+          <Gift size={13} /> უფასო ({pointTodaySales.filter(s => s.paymentMethod === 'free' || s.discountType === 'free' || s.totalAmount === 0).length})
         </button>
 
         <button
           onClick={() => setFilterType('discount')}
           style={{
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
             background: filterType === 'discount' ? '#EC4899' : '#181B22',
             color: filterType === 'discount' ? '#FFFFFF' : '#94A3B8',
             border: '1px solid #282E3A',
@@ -302,7 +307,7 @@ export const ReceiptsHistoryView: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          🏷️ ფასდაკლებით ({pointTodaySales.filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4').length})
+          <Tag size={13} /> ფასდაკლებით ({pointTodaySales.filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4').length})
         </button>
       </div>
 
@@ -355,12 +360,14 @@ export const ReceiptsHistoryView: React.FC = () => {
                           ))}
                         </div>
                         {sale.discountType !== 'none' && (
-                          <div style={{ fontSize: '11.5px', marginTop: '4px', fontWeight: 600, color: sale.discountType === 'free' ? '#A855F7' : '#EC4899' }}>
-                            {sale.discountType === 'free'
-                              ? '🎁 უფასო რაციონი'
-                              : sale.discountType === 'percent50'
-                              ? `🏷️ ფასდაკლება -50% (-${sale.discountAmount.toFixed(2)} ₾)`
-                              : `🏷️ ფასდაკლება (-${sale.discountAmount.toFixed(2)} ₾)`}
+                          <div style={{ fontSize: '11.5px', marginTop: '4px', fontWeight: 600, color: sale.discountType === 'free' ? '#A855F7' : '#EC4899', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {sale.discountType === 'free' ? (
+                              <><Gift size={11} /> უფასო რაციონი</>
+                            ) : sale.discountType === 'percent50' ? (
+                              <><Tag size={11} /> ფასდაკლება -50% (-{sale.discountAmount.toFixed(2)} ₾)</>
+                            ) : (
+                              <><Tag size={11} /> ფასდაკლება (-{sale.discountAmount.toFixed(2)} ₾)</>
+                            )}
                             {sale.discountComment ? ` • ${sale.discountComment}` : ''}
                           </div>
                         )}
@@ -368,7 +375,9 @@ export const ReceiptsHistoryView: React.FC = () => {
                       <td>
                         {sale.discountType === 'free' ? (
                           <span style={{
-                            display: 'inline-block',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
                             fontSize: '11.5px',
                             fontWeight: 700,
                             padding: '3px 8px',
@@ -377,11 +386,13 @@ export const ReceiptsHistoryView: React.FC = () => {
                             color: '#C084FC',
                             border: '1px solid rgba(168, 85, 247, 0.3)',
                           }}>
-                            🎁 უფასო
+                            <Gift size={11} /> უფასო
                           </span>
                         ) : (
                           <span style={{
-                            display: 'inline-block',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
                             fontSize: '11.5px',
                             fontWeight: 600,
                             padding: '3px 8px',
@@ -390,11 +401,13 @@ export const ReceiptsHistoryView: React.FC = () => {
                             color: sale.paymentMethod === 'card' ? '#38BDF8' : sale.paymentMethod === 'cash' ? '#FBBF24' : '#E2E8F0',
                             border: '1px solid #282E3A',
                           }}>
-                            {sale.paymentMethod === 'card'
-                              ? '💳 ბარათი'
-                              : sale.paymentMethod === 'cash'
-                              ? '💵 ნაღდი'
-                              : `🔀 შერეული (${sale.splitDetails?.cashAmount}+${sale.splitDetails?.cardAmount})`}
+                            {sale.paymentMethod === 'card' ? (
+                              <><CreditCard size={11} /> ბარათი</>
+                            ) : sale.paymentMethod === 'cash' ? (
+                              <><Banknote size={11} /> ნაღდი</>
+                            ) : (
+                              <><Shuffle size={11} /> შერეული ({sale.splitDetails?.cashAmount}+{sale.splitDetails?.cardAmount})</>
+                            )}
                           </span>
                         )}
                       </td>
@@ -420,7 +433,7 @@ export const ReceiptsHistoryView: React.FC = () => {
                               className="partner-min-btn-outline"
                               style={{ fontSize: '11px', padding: '4px 8px' }}
                             >
-                              ✏️ გადახდა
+                              <Pencil size={11} /> გადახდა
                             </button>
                             <button
                               onClick={() => {
@@ -430,7 +443,7 @@ export const ReceiptsHistoryView: React.FC = () => {
                               className="partner-min-danger-btn"
                               style={{ fontSize: '11px', padding: '4px 8px' }}
                             >
-                              ↩ დაბრუნება
+                              <Undo2 size={11} /> დაბრუნება
                             </button>
                           </div>
                         ) : (
@@ -483,6 +496,7 @@ export const ReceiptsHistoryView: React.FC = () => {
                   onClick={() => setEditPaymentMethod('card')}
                   style={{
                     flex: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
                     padding: '8px',
                     borderRadius: '6px',
                     fontSize: '12px',
@@ -493,13 +507,14 @@ export const ReceiptsHistoryView: React.FC = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  💳 ბარათი
+                  <CreditCard size={13} /> ბარათი
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditPaymentMethod('cash')}
                   style={{
                     flex: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
                     padding: '8px',
                     borderRadius: '6px',
                     fontSize: '12px',
@@ -510,13 +525,14 @@ export const ReceiptsHistoryView: React.FC = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  💵 ნაღდი
+                  <Banknote size={13} /> ნაღდი
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditPaymentMethod('split')}
                   style={{
                     flex: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
                     padding: '8px',
                     borderRadius: '6px',
                     fontSize: '12px',
@@ -527,13 +543,14 @@ export const ReceiptsHistoryView: React.FC = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  🔀 შერეული
+                  <Shuffle size={13} /> შერეული
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditPaymentMethod('free')}
                   style={{
                     flex: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
                     padding: '8px',
                     borderRadius: '6px',
                     fontSize: '12px',
@@ -544,7 +561,7 @@ export const ReceiptsHistoryView: React.FC = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  🎁 უფასო
+                  <Gift size={13} /> უფასო
                 </button>
               </div>
 
@@ -642,7 +659,7 @@ export const ReceiptsHistoryView: React.FC = () => {
                 className="partner-min-danger-btn"
                 style={{ width: '100%', padding: '9px', fontWeight: 700 }}
               >
-                ↩ ჩეკის გაუქმება და რაციონების დაბრუნება
+                <Undo2 size={14} /> ჩეკის გაუქმება და რაციონების დაბრუნება
               </button>
             </div>
           </div>

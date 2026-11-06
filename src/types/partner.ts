@@ -101,6 +101,33 @@ export interface PartnerShipment {
   totalUnits: number;
 }
 
+export interface PartnerPreorderItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  pricePerUnit: number;
+  totalPrice: number;
+}
+
+export interface PartnerPreorder {
+  id: string;
+  pointId: string;
+  preorderNumber: string;
+  items: PartnerPreorderItem[];
+  originalAmount: number; // full price before discount
+  discountAmount: number; // -50%
+  totalAmount: number; // paid in advance (50% of original)
+  comment: string; // who is taking the preorder
+  pickupDate: string; // YYYY-MM-DD, date the customer will pick up the order (defaults to tomorrow)
+  paymentMethod: 'card' | 'cash';
+  sellerRole: 'cashier' | 'manager';
+  status: 'pending' | 'fulfilled' | 'cancelled';
+  linkedSaleId?: string; // the advance-payment sale record created immediately, counted in the shift's revenue
+  createdAt: string; // ISO string
+  fulfilledAt?: string;
+  cancelledAt?: string;
+}
+
 export interface PartnerWriteOff {
   id: string;
   pointId: string;

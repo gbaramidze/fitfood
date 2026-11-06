@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { 
-  sendTelegramMessage, 
-  formatSaleNotification, 
+import {
+  sendTelegramMessage,
+  formatSaleNotification,
+  formatPreorderNotification,
+  formatShipmentNotification,
+  formatWriteOffNotification,
   formatLeadNotification,
   getTodayStatsMessage,
   getYesterdayStatsMessage,
@@ -25,6 +28,12 @@ export async function POST(req: NextRequest) {
       messageText = rawMessage;
     } else if (type === 'sale') {
       messageText = formatSaleNotification(data);
+    } else if (type === 'preorder') {
+      messageText = formatPreorderNotification(data);
+    } else if (type === 'shipment') {
+      messageText = formatShipmentNotification(data);
+    } else if (type === 'writeoff') {
+      messageText = formatWriteOffNotification(data);
     } else if (type === 'lead') {
       messageText = formatLeadNotification(data);
     } else if (type === 'stats' || type === 'today' || type === 'dges') {

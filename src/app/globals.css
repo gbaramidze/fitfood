@@ -5180,6 +5180,9 @@ img {
 }
 
 .partner-role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 10px;
   font-weight: 700;
   padding: 3px 7px;
@@ -5334,6 +5337,60 @@ img {
   color: #FFFFFF;
 }
 
+/* Body: sidebar + main content, side by side */
+.partner-min-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.partner-sidebar {
+  flex-shrink: 0;
+  width: 220px;
+  background-color: #111318;
+  border-right: 1px solid #1F242E;
+  padding: 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.partner-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.partner-sidebar-item:hover {
+  background: #181B22;
+  color: #FFFFFF;
+}
+
+.partner-sidebar-item.active {
+  background: #FFFFFF;
+  color: #090A0F;
+  font-weight: 700;
+}
+
+.partner-sidebar-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 /* Main Area */
 .partner-min-main {
   flex: 1;
@@ -5342,9 +5399,86 @@ img {
   max-width: 1600px;
   width: 100%;
   margin: 0 auto;
-  overflow: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* Operations view: mode switcher */
+.ops-view-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The catalog+cart grid gets a fixed height here (rather than stretching to
+   fill remaining space) because operation modes can add extra scrollable
+   content below it (history tables); the page itself scrolls via
+   .partner-min-main instead. Only above the stacking breakpoint — below it,
+   catalog and cart stack vertically and should each size to their content. */
+@media (min-width: 1025px) {
+  .ops-view-wrap .pos-min-layout {
+    height: 620px;
+    max-height: 620px;
+    flex: none;
+  }
+}
+
+.ops-mode-switcher {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.ops-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #181B22;
+  border: 1px solid #282E3A;
+  color: #94A3B8;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 9px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ops-mode-btn:hover {
+  color: #FFFFFF;
+  border-color: #3B82F6;
+}
+
+.ops-mode-btn.active.ops-mode-sale {
+  background: #10B981;
+  border-color: #10B981;
+  color: #04120B;
+}
+
+.ops-mode-btn.active.ops-mode-receive {
+  background: #3B82F6;
+  border-color: #3B82F6;
+  color: #FFFFFF;
+}
+
+.ops-mode-btn.active.ops-mode-writeoff {
+  background: #EF4444;
+  border-color: #EF4444;
+  color: #FFFFFF;
+}
+
+.ops-mode-btn.active.ops-mode-preorder {
+  background: #EC4899;
+  border-color: #EC4899;
+  color: #FFFFFF;
+}
+
+.ops-mode-divider {
+  width: 1px;
+  align-self: stretch;
+  background: #282E3A;
+  margin: 0 4px;
 }
 
 /* POS Layout (100dvh fullscreen) */
@@ -5549,6 +5683,9 @@ img {
 }
 
 .pos-min-panel-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   font-weight: 800;
   color: #FFFFFF;
@@ -5697,6 +5834,10 @@ img {
 }
 
 .pay-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   background: transparent;
   border: none;
   color: #94A3B8;
@@ -5753,6 +5894,10 @@ img {
 }
 
 .disc-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   background: #111318;
   border: 1px solid #282E3A;
   color: #94A3B8;
@@ -5856,6 +6001,10 @@ img {
 }
 
 .pos-min-charge-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   background: #FFFFFF;
   color: #090A0F;
   border: none;
@@ -6038,6 +6187,9 @@ img {
 }
 
 .partner-min-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 20px;
   color: #FFFFFF;
 }
@@ -6098,6 +6250,9 @@ img {
 }
 
 .partner-min-kpi .label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   color: #64748B;
   margin-bottom: 6px;
@@ -6191,6 +6346,9 @@ img {
 }
 
 .payment-mini-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   background: #181B22;
   padding: 2px 6px;
@@ -6213,11 +6371,17 @@ img {
 }
 
 .badge-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   color: #34D399;
 }
 
 .badge-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   color: #F59E0B;
 }
@@ -6274,6 +6438,10 @@ img {
 }
 
 .partner-min-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   background: transparent;
   border: 1px solid #282E3A;
   color: #CBD5E1;
@@ -6285,6 +6453,10 @@ img {
 }
 
 .partner-min-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   background: #EF4444;
   color: #FFFFFF;
   border: none;
@@ -6307,6 +6479,12 @@ img {
   padding: 10px 14px;
   border-radius: 8px;
   font-size: 13px;
+}
+
+.partner-min-alert span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .partner-min-empty, .partner-min-empty-card {
@@ -6738,7 +6916,9 @@ img {
 .partner-point-addr {
   font-size: 12.5px;
   color: #94A3B8;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .partner-point-enter-badge {
@@ -6822,6 +7002,10 @@ img {
 }
 
 .gym-chip-text span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
   font-size: 9px;
   color: #94A3B8;
 }
@@ -7020,9 +7204,22 @@ img {
     height: auto;
     padding: 12px 16px;
   }
-  .partner-min-nav {
-    order: 3;
+  .partner-min-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .partner-sidebar {
     width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid #1F242E;
+    padding: 8px 10px;
+  }
+  .partner-sidebar-label {
+    white-space: nowrap;
+  }
+  .ops-mode-switcher {
     overflow-x: auto;
   }
 }

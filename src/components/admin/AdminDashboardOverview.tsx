@@ -112,6 +112,38 @@ export const AdminDashboardOverview: React.FC = () => {
     return incomingOrders.filter(o => filterByDate(o.createdAt));
   }, [incomingOrders, selectedPeriod]);
 
+  // Filtered Write-offs for selected period
+  const periodWriteOffs = useMemo(() => {
+    return writeOffs.filter(w => filterByDate(w.createdAt));
+  }, [writeOffs, selectedPeriod]);
+
+  const periodWriteOffUnits = useMemo(() => {
+    return periodWriteOffs.reduce((sum, w) => sum + (Number(w.quantity) || 0), 0);
+  }, [periodWriteOffs]);
+
+  const periodWriteOffValue = useMemo(() => {
+    return periodWriteOffs.reduce((sum, w) => {
+      const unitPrice = Number(w.retailPrice) > 0
+        ? Number(w.retailPrice)
+        : (dishes.find(d => d.id === w.productId)?.retailPrice || 0);
+      return sum + unitPrice * (Number(w.quantity) || 0);
+    }, 0);
+  }, [periodWriteOffs, dishes]);
+
+  const periodWriteOffBreakdown = useMemo(() => {
+    const map: Record<string, { name: string; quantity: number; value: number }> = {};
+    periodWriteOffs.forEach(w => {
+      const key = w.productId || w.productName;
+      if (!map[key]) map[key] = { name: w.productName, quantity: 0, value: 0 };
+      const unitPrice = Number(w.retailPrice) > 0
+        ? Number(w.retailPrice)
+        : (dishes.find(d => d.id === w.productId)?.retailPrice || 0);
+      map[key].quantity += Number(w.quantity) || 0;
+      map[key].value += unitPrice * (Number(w.quantity) || 0);
+    });
+    return Object.values(map).sort((a, b) => b.value - a.value);
+  }, [periodWriteOffs, dishes]);
+
   // Completed POS Sales for period
   const completedPeriodSales = useMemo(() => {
     return periodSales.filter(s => s.status === 'completed');
@@ -526,6 +558,23 @@ export const AdminDashboardOverview: React.FC = () => {
             სავაჭრო მარჟა: <b>{periodMarginPercent}%</b> (თვითღირებ.: {periodFoodCost.toFixed(2)} ₾)
           </div>
         </div>
+
+        {/* 8. Write-offs (expired / damaged goods) */}
+        <div className="admin-kpi-card" style={{ borderColor: 'rgba(239, 68, 68, 0.35)' }}>
+          <div className="kpi-header">
+            <span className="kpi-title" style={{ color: '#F87171' }}>🗑️ ჩამოწერილი საქონელი</span>
+            <span className="kpi-icon">⚠️</span>
+          </div>
+          <div className="kpi-value" style={{ color: '#F87171' }}>
+            -{periodWriteOffValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₾
+          </div>
+          <div className="kpi-sub-breakdown">
+            <span>📦 <b>{periodWriteOffUnits} ცალი</b> ({periodWriteOffs.length} ოპერაცია)</span>
+          </div>
+          <button onClick={() => setActiveTab('writeoffs')} className="admin-btn-secondary" style={{ marginTop: '8px', width: '100%', justifyContent: 'center' }}>
+            დეტალები →
+          </button>
+        </div>
       </div>
 
       {/* Sales by Gym / Point Breakdown (Mega Gym, XXL, Fitness Academy) */}
@@ -792,6 +841,65 @@ export const AdminDashboardOverview: React.FC = () => {
                   );
                 })}
               </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Written-off Goods Breakdown */}
+      {periodWriteOffBreakdown.length > 0 && (
+        <div className="admin-card" style={{ marginBottom: '20px' }}>
+          <div className="admin-card-header">
+            <div>
+              <h3 style={{ color: '#F87171' }}>🗑️ ჩამოწერილი საქონელი ({selectedPeriod === 'today' ? 'დღეს' : 'პერიოდი'})</h3>
+              <p>ვადაგასული / დაზიანებული რაციონები პარტნიორ წერტილებზე, საცალო ფასებში</p>
+            </div>
+            <button onClick={() => setActiveTab('writeoffs')} className="admin-link-btn">
+              ჩამოწერების მართვა →
+            </button>
+          </div>
+
+          <div className="admin-table-responsive">
+            <table className="admin-data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>რაციონი</th>
+                  <th>ჩამოწერილია</th>
+                  <th>ღირებულება</th>
+                  <th>წილი ჩამოწერაში</th>
+                </tr>
+              </thead>
+              <tbody>
+                {periodWriteOffBreakdown.map((item, idx) => {
+                  const share = periodWriteOffValue > 0 ? Math.round((item.value / periodWriteOffValue) * 100) : 0;
+                  return (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 800, color: '#9CA3AF' }}>#{idx + 1}</td>
+                      <td><b>{item.name}</b></td>
+                      <td><b style={{ fontSize: '14px', color: '#F9FAFB' }}>{item.quantity} ცალი</b></td>
+                      <td><b style={{ color: '#F87171' }}>-{item.value.toFixed(2)} ₾</b></td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="progress-bar-bg" style={{ width: '80px' }}>
+                            <div className="progress-bar-fill" style={{ width: `${share}%`, background: '#EF4444' }}></div>
+                          </div>
+                          <span style={{ fontSize: '12px' }}>{share}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{ fontWeight: 700, borderTop: '2px solid #334155', background: '#0F172A' }}>
+                  <td></td>
+                  <td>სულ</td>
+                  <td>{periodWriteOffUnits} ცალი</td>
+                  <td style={{ color: '#F87171' }}>-{periodWriteOffValue.toFixed(2)} ₾</td>
+                  <td>100%</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>

@@ -100,6 +100,28 @@ CREATE TABLE IF NOT EXISTS partner_write_offs (
   reason TEXT NOT NULL,                -- 'expired' | 'damaged' | 'sample' | 'other'
   reason_text TEXT NOT NULL,
   notes TEXT,
+  cost_price NUMERIC(10, 2),
+  retail_price NUMERIC(10, 2),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6b. Partner Preorders (Pending customer preorders, paid in advance with -50% discount, not yet deducted from stock)
+CREATE TABLE IF NOT EXISTS partner_preorders (
+  id TEXT PRIMARY KEY,
+  point_id TEXT REFERENCES partner_points(id) ON DELETE CASCADE,
+  preorder_number TEXT NOT NULL,
+  items JSONB NOT NULL,                -- [{productId, productName, quantity, pricePerUnit, totalPrice}]
+  original_amount NUMERIC(10, 2) NOT NULL,
+  discount_amount NUMERIC(10, 2) DEFAULT 0,
+  total_amount NUMERIC(10, 2) NOT NULL, -- paid in advance (50% of original)
+  comment TEXT NOT NULL,               -- who is taking the preorder
+  pickup_date DATE NOT NULL,           -- date the customer will pick up the order (defaults to tomorrow)
+  payment_method TEXT NOT NULL,        -- 'card' | 'cash'
+  seller_role TEXT NOT NULL DEFAULT 'cashier',
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'fulfilled' | 'cancelled'
+  linked_sale_id TEXT,                 -- the advance-payment sale record created immediately, for the shift's revenue totals
+  fulfilled_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -162,6 +184,9 @@ CREATE INDEX IF NOT EXISTS idx_partner_sales_point ON partner_sales(point_id);
 CREATE INDEX IF NOT EXISTS idx_partner_sales_created ON partner_sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_partner_shipments_point ON partner_shipments(point_id);
 CREATE INDEX IF NOT EXISTS idx_partner_writeoffs_point ON partner_write_offs(point_id);
+CREATE INDEX IF NOT EXISTS idx_partner_preorders_point ON partner_preorders(point_id);
+CREATE INDEX IF NOT EXISTS idx_partner_preorders_status ON partner_preorders(status);
+CREATE INDEX IF NOT EXISTS idx_partner_preorders_pickup_date ON partner_preorders(pickup_date);
 CREATE INDEX IF NOT EXISTS idx_admin_expenses_date ON admin_expenses(date);
 CREATE INDEX IF NOT EXISTS idx_admin_salaries_status ON admin_salaries(payment_status);
 CREATE INDEX IF NOT EXISTS idx_admin_blog_slug ON admin_blog_posts(slug);
@@ -175,6 +200,7 @@ ALTER TABLE partner_stocks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE partner_sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE partner_shipments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE partner_write_offs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE partner_preorders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_salaries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_blog_posts ENABLE ROW LEVEL SECURITY;
@@ -185,10 +211,11 @@ CREATE POLICY "Allow public read-write for POS partner_stocks" ON partner_stocks
 CREATE POLICY "Allow public read-write for POS partner_sales" ON partner_sales FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for POS partner_shipments" ON partner_shipments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for POS partner_write_offs" ON partner_write_offs FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write for POS partner_preorders" ON partner_preorders FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for admin_expenses" ON admin_expenses FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for admin_salaries" ON admin_salaries FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write for admin_blog_posts" ON admin_blog_posts FOR ALL USING (true) WITH CHECK (true);
 
 -- Enable Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE partner_points, partner_products, partner_stocks, partner_sales, partner_shipments, partner_write_offs, admin_expenses, admin_salaries, admin_blog_posts;
+ALTER PUBLICATION supabase_realtime ADD TABLE partner_points, partner_products, partner_stocks, partner_sales, partner_shipments, partner_write_offs, partner_preorders, admin_expenses, admin_salaries, admin_blog_posts;
 

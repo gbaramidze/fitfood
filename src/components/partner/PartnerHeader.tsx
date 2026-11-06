@@ -5,16 +5,13 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePartner } from '@/context/PartnerContext';
 import { getPointLogo } from '@/data/partnerData';
+import { Crown, Briefcase, Circle, KeyRound, LogOut } from 'lucide-react';
 
 interface PartnerHeaderProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
   openPinModal: () => void;
 }
 
 export const PartnerHeader: React.FC<PartnerHeaderProps> = ({
-  activeTab,
-  setActiveTab,
   openPinModal,
 }) => {
   const {
@@ -64,41 +61,16 @@ export const PartnerHeader: React.FC<PartnerHeaderProps> = ({
             <span className="partner-chip-addr">{pointAddress}</span>
           </div>
           <span className={`partner-role-pill ${currentRole}`}>
-            {currentRole === 'admin' ? '👑 Admin' : currentRole === 'manager' ? '💼 მენეჯერი' : '🟢 მოლარე'}
+            {currentRole === 'admin' ? (
+              <><Crown size={11} /> Admin</>
+            ) : currentRole === 'manager' ? (
+              <><Briefcase size={11} /> მენეჯერი</>
+            ) : (
+              <><Circle size={8} fill="currentColor" /> მოლარე</>
+            )}
           </span>
         </button>
       </div>
-
-      {/* Center: Georgian Nav Pills */}
-      <nav className="partner-min-nav">
-        <button
-          onClick={() => setActiveTab('pos')}
-          className={`partner-min-tab ${activeTab === 'pos' ? 'active' : ''}`}
-        >
-          სალარო (POS)
-        </button>
-
-        <button
-          onClick={() => setActiveTab('receipts')}
-          className={`partner-min-tab ${activeTab === 'receipts' ? 'active' : ''}`}
-        >
-          ჩეკები
-        </button>
-
-        <button
-          onClick={() => setActiveTab('shipments')}
-          className={`partner-min-tab ${activeTab === 'shipments' ? 'active' : ''}`}
-        >
-          მიღება
-        </button>
-
-        <button
-          onClick={() => setActiveTab('zreport')}
-          className={`partner-min-tab ${activeTab === 'zreport' ? 'active' : ''}`}
-        >
-          დღიური ანგარიში
-        </button>
-      </nav>
 
       {/* Right: Actions */}
       <div className="partner-min-right">
@@ -107,14 +79,14 @@ export const PartnerHeader: React.FC<PartnerHeaderProps> = ({
           className="partner-min-pin-btn"
           title="თანამშრომლის შეცვლა (PIN კოდი)"
         >
-          🔑 PIN
+          <KeyRound size={13} /> PIN
         </button>
         <button
           onClick={logout}
           className="partner-min-logout-btn"
           title="გასვლა და სხვა დარბაზის არჩევა"
         >
-          🚪 გასვლა
+          <LogOut size={13} /> გასვლა
         </button>
       </div>
     </header>
