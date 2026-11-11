@@ -31,14 +31,33 @@ export const DURATIONS: { days: number; key: keyof Program['prices'] }[] = [
   { days: 30, key: 'thirtyDays' },
 ];
 
-export type SlotId = 'morning' | 'comfort' | 'evening';
+// For now we deliver only in the evening, 20:00–23:00, in one-hour windows.
+export type SlotId = 'e20' | 'e21' | 'e22';
 export const SLOTS: { id: SlotId; time: string }[] = [
-  { id: 'morning', time: '06:30 – 08:30' },
-  { id: 'comfort', time: '08:30 – 10:30' },
-  { id: 'evening', time: '19:00 – 21:00' },
+  { id: 'e20', time: '20:00 – 21:00' },
+  { id: 'e21', time: '21:00 – 22:00' },
+  { id: 'e22', time: '22:00 – 23:00' },
 ];
 
-export type PayId = 'cash' | 'card' | 'link';
+export const CONTACT = {
+  phone: '+995 596 56 99 99',
+  phoneHref: 'tel:+995596569999',
+  instagram: 'https://www.instagram.com/fitnessfood.ge',
+  instagramHandle: '@fitnessfood.ge',
+};
+
+/**
+ * The published program price is for the middle of the program's calorie range.
+ * Smaller / bigger daily portions cost proportionally less / more: ~55% of the price is fixed
+ * (packaging, delivery, kitchen time) and ~45% follows the calories.
+ * Tweak the two numbers below to change how steeply price follows calories.
+ */
+const MID_KCAL: Record<string, number> = { 'prog-slim': 1125, 'prog-balance': 1800, 'prog-power': 2600, 'prog-detox': 1000 };
+const FIXED_SHARE = 0.55;
+export const tierPrice = (base: number, programId: string, kcal: number) =>
+  Math.round(base * (FIXED_SHARE + (1 - FIXED_SHARE) * (kcal / (MID_KCAL[programId] || kcal))));
+
+export type PayId = 'cash' | 'card' | 'online';
 
 export const dayKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -49,9 +68,46 @@ export const addDays = (d: Date, n: number) => {
   return x;
 };
 
-const LOCALE_TAG: Record<Locale, string> = { ka: 'ka-GE', ru: 'ru-RU', en: 'en-GB' };
-export const fmtDate = (d: Date, l: Locale, opts: Intl.DateTimeFormatOptions) =>
-  new Intl.DateTimeFormat(LOCALE_TAG[l], opts).format(d);
+// Own date names, so Georgian / Russian / English always read correctly (no dependence on the browser's Intl data).
+// Weekday arrays start on Sunday (Date#getDay); month arrays on January.
+export const MONTH_NOM: Record<Locale, string[]> = {
+  ka: ['იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი', 'ივლისი', 'აგვისტო', 'სექტემბერი', 'ოქტომბერი', 'ნოემბერი', 'დეკემბერი'],
+  ru: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'],
+  en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+};
+const MONTH_GEN: Record<Locale, string[]> = {
+  ka: MONTH_NOM.ka,
+  ru: ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'],
+  en: MONTH_NOM.en,
+};
+const MONTH_SHORT: Record<Locale, string[]> = {
+  ka: ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'],
+  ru: ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'],
+  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+};
+export const WEEKDAY_LONG: Record<Locale, string[]> = {
+  ka: ['კვირა', 'ორშაბათი', 'სამშაბათი', 'ოთხშაბათი', 'ხუთშაბათი', 'პარასკევი', 'შაბათი'],
+  ru: ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'],
+  en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+};
+export const WEEKDAY_SHORT: Record<Locale, string[]> = {
+  ka: ['კვი', 'ორშ', 'სამ', 'ოთხ', 'ხუთ', 'პარ', 'შაბ'],
+  ru: ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'],
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+};
+
+/** "Fri, 13 Nov" — pass any of weekday / day / month; 'long' spells names out. */
+export function fmtDate(
+  d: Date,
+  l: Locale,
+  o: { weekday?: 'short' | 'long'; day?: 'numeric'; month?: 'short' | 'long' }
+): string {
+  const wd = o.weekday ? (o.weekday === 'long' ? WEEKDAY_LONG : WEEKDAY_SHORT)[l][d.getDay()] : '';
+  const dm = [o.day ? String(d.getDate()) : '', o.month ? (o.month === 'long' ? MONTH_GEN : MONTH_SHORT)[l][d.getMonth()] : '']
+    .filter(Boolean)
+    .join(' ');
+  return wd && dm ? `${wd}, ${dm}` : wd || dm;
+}
 
 type Str = Record<Locale, string>;
 const s = (ka: string, ru: string, en: string): Str => ({ ka, ru, en });
@@ -76,7 +132,7 @@ export const T = {
   stat4: s('კერძი ბაზაში', 'блюд в базе', 'dishes'),
 
   s1: s('პროგრამა', 'Программа', 'Program'),
-  s2: s('კალორიები', 'Калорийность', 'Calories'),
+  s2: s('კალორიები და ვადა', 'Калории и срок', 'Calories & duration'),
   s3: s('ხანგრძლივობა', 'Срок', 'Duration'),
   s4: s('დაწყება და მიტანა', 'Старт и доставка', 'Start & delivery'),
   s5: s('ალერგიები', 'Аллергии и стоп-лист', 'Allergies & stop-list'),
@@ -93,9 +149,9 @@ export const T = {
   popular: s('პოპულარული', 'Хит', 'Popular'),
   startDate: s('დაწყების თარიღი', 'Дата старта', 'Start date'),
   startHint: s(
-    'ხვალინდელ შეკვეთას ვიღებთ დღეს 18:00-მდე.',
-    'Заказ на завтра принимаем до 18:00 сегодня.',
-    'Orders for tomorrow are accepted until 18:00 today.'
+    'მიტანა ხდება მხოლოდ საღამოს 20:00–23:00. ხვალინდელ შეკვეთას ვიღებთ დღეს 18:00-მდე.',
+    'Пока доставляем только вечером, с 20:00 до 23:00. Заказ на завтра принимаем до 18:00 сегодня.',
+    'For now we deliver in the evening only, 20:00–23:00. Orders for tomorrow are accepted until 18:00 today.'
   ),
   slot: s('მიტანის დრო', 'Время доставки', 'Delivery time'),
   stopHint: s(
@@ -111,7 +167,6 @@ export const T = {
     'Это реальное меню с вашей даты старта. Нажмите «Заменить», чтобы выбрать другое блюдо.',
     'This is the real menu from your start date. Tap “Swap” to pick another dish.'
   ),
-  week: s('კვირა', 'неделя', 'week'),
   swap: s('შეცვლა', 'Заменить', 'Swap'),
   swapped: s('შეცვლილია', 'заменено', 'swapped'),
   swapTitle: s('აირჩიე ჩანაცვლება', 'Выберите замену', 'Choose a replacement'),
@@ -140,8 +195,10 @@ export const T = {
   payment: s('გადახდა', 'Оплата', 'Payment'),
   payCash: s('ნაღდი კურიერთან', 'Наличными курьеру', 'Cash to courier'),
   payCard: s('ბარათი კურიერთან', 'Картой курьеру', 'Card to courier'),
-  payLink: s('გადახდის ბმული', 'Ссылка на оплату', 'Payment link'),
-  payLinkSub: s('გამოგიგზავნით მესენჯერში', 'Пришлём в мессенджер', 'We send it to your messenger'),
+  payOnline: s('ონლაინ ბარათით', 'Онлайн картой', 'Pay online by card'),
+  payOnlineSub: s('უსაფრთხო გადახდა ბანკის გვერდზე — Visa / Mastercard', 'Безопасная оплата на странице банка — Visa / Mastercard', 'Secure payment on the bank page — Visa / Mastercard'),
+  doneLink: s('მენეჯერი გამოგიგზავნით გადახდის ბმულს ტელეფონზე.', 'Менеджер пришлёт ссылку на оплату на ваш телефон.', 'A manager will send the payment link to your phone.'),
+  account: s('პირადი კაბინეტი', 'Личный кабинет', 'My account'),
   free: s('უფასო', 'Бесплатно', 'Free'),
 
   summary: s('შენი შეკვეთა', 'Ваш заказ', 'Your order'),
@@ -160,9 +217,16 @@ export const T = {
   stepOf: s('ნაბიჯი', 'Шаг', 'Step'),
   toOrder: s('გადასვლა შეკვეთაზე', 'К оформлению', 'Go to checkout'),
 
-  filmsKicker: s('ჩვენი სამზარეულო', 'НАША КУХНЯ', 'OUR KITCHEN'),
+  filmsKicker: s('ფირმენი კერძები', 'ФИРМЕННЫЕ БЛЮДА', 'SIGNATURE DISHES'),
   filmsTitle: s('ნახე, როგორ ვამზადებთ', 'Смотрите, как мы готовим', 'See how we cook'),
-  filmsSub: s('ოთხი ფირმენი კერძი — სუფთა ინგრედიენტები, ზუსტი წონა.', 'Четыре фирменных блюда — чистые ингредиенты, точный вес порций.', 'Four signature dishes — clean ingredients, exact portions.'),
+  filmsSub: s('აირჩიე კერძი — ვიდეო გაჩვენებს, როგორ მზადდება ჩვენს სამზარეულოში.', 'Выберите блюдо — видео покажет, как оно готовится на нашей кухне.', 'Pick a dish — the video shows how it is made in our kitchen.'),
+  watch: s('ვიდეო', 'Видео', 'Video'),
+  toRation: s('რაციონში', 'Хочу в рацион', 'Add to my ration'),
+  loadingMenu: s('მენიუ იტვირთება…', 'Загружаем меню…', 'Loading the menu…'),
+  menuError: s('მენიუ ვერ ჩაიტვირთა. სცადე გვერდის განახლება.', 'Не удалось загрузить меню. Обновите страницу.', 'Could not load the menu. Please refresh.'),
+  menuEmpty: s('ამ დღისთვის მენიუ ჯერ არ არის შევსებული.', 'На этот день меню ещё не заполнено.', 'The menu for this day is not filled in yet.'),
+  callUs: s('დაგვირეკეთ', 'Позвонить', 'Call us'),
+  contactsTitle: s('კითხვები? ჩვენ ხაზზე ვართ', 'Есть вопросы? Мы на связи', 'Questions? We are here'),
   howTitle: s('როგორ მუშაობს', 'Как это работает', 'How it works'),
   how1: s('აირჩიე რაციონი', 'Выбираете рацион', 'Pick a ration'),
   how1d: s('პროგრამა, კალორიები, დღეები და ალერგიები.', 'Программа, калорийность, срок и аллергии.', 'Program, calories, duration and allergies.'),

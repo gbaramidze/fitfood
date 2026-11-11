@@ -3,3 +3,6 @@ node_modules
 .playwright-mcp
 .env
 .env.local
+
+# raw video masters (keep outside repo, ship compressed mp4)
+*.mov

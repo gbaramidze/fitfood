@@ -21,7 +21,8 @@ export const SiteNavigationWrapper: React.FC<{ children: React.ReactNode }> = ({
     pathname?.startsWith('/admin') ||
     pathname?.startsWith('/partner') ||
     pathname?.startsWith('/kitchen') ||
-    pathname?.startsWith('/order');
+    pathname?.startsWith('/order') ||
+    pathname?.startsWith('/account');
 
   if (isSpecialWorkstation) {
     return <>{children}</>;

@@ -8,7 +8,7 @@ import { kitchenDbService } from '@/services/kitchenDbService';
 import { computeKitchenPlan, KitchenPlan } from '@/lib/kitchenPlanHelper';
 import { computeRationPlan, RationDayPlan, remainingDays, SentLookup } from '@/lib/rationPlanHelper';
 import { dayKeyOf } from '@/lib/salesForecastHelper';
-import { allRationDishes as siteDishes } from '@/lib/rationRotation';
+import { useRationDishes } from '@/lib/rationDishesService';
 import { checkId, KitchenCheck, KitchenClient } from '@/types/kitchen';
 import { PartnerWriteOff } from '@/types/partner';
 
@@ -64,6 +64,8 @@ function writeLocal(key: string, value: unknown) {
 export const KitchenProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { sales, points, dishes, preorders, stocks } = useAdmin();
 
+  // ration dishes come from the database (site channel of partner_products)
+  const { dishes: siteDishes } = useRationDishes();
   const [now, setNow] = useState<Date>(() => new Date());
   const [offset, setOffset] = useState<DayOffset>(1);
   const [writeOffs, setWriteOffs] = useState<PartnerWriteOff[]>([]);
@@ -190,7 +192,7 @@ export const KitchenProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const ration = useMemo(
     () => computeRationPlan(clients, siteDishes, targetDate, now, sentLookup),
-    [clients, targetDate, now, sentLookup]
+    [clients, siteDishes, targetDate, now, sentLookup]
   );
 
   // ---- ticks ----

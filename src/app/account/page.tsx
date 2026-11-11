@@ -1,246 +1,305 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ArrowLeft, CreditCard, LogOut, Phone } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
-import { useStore } from '@/context/StoreContext';
-import { IconPause, IconCalendar, IconGift, IconCheck, IconChef, IconShield, IconSparkles } from '@/components/Icons';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { normalizePhone } from '@/lib/phone';
+import { useRationDishes } from '@/lib/rationDishesService';
+import { menuForDate } from '@/lib/rationRotation';
+import { Locale } from '@/types';
+import { CONTACT, addDays, dayKey, fmtDate } from '@/components/order/orderData';
+import '@/components/order/order.css';
+
+type Str = Record<Locale, string>;
+const s = (ka: string, ru: string, en: string): Str => ({ ka, ru, en });
+
+const A = {
+  title: s('პირადი კაბინეტი', 'Личный кабинет', 'My account'),
+  loginSub: s('შეიყვანე ტელეფონი — გამოგიგზავნით SMS კოდს.', 'Введите телефон — пришлём SMS-код.', 'Enter your phone — we will text you a code.'),
+  phone: s('ტელეფონი', 'Телефон', 'Phone'),
+  sendCode: s('კოდის გაგზავნა', 'Получить код', 'Send code'),
+  code: s('SMS კოდი', 'Код из SMS', 'SMS code'),
+  confirm: s('შესვლა', 'Войти', 'Sign in'),
+  codeSent: s('კოდი გაიგზავნა ნომერზე', 'Код отправлен на', 'Code sent to'),
+  change: s('ნომრის შეცვლა', 'Другой номер', 'Change number'),
+  badPhone: s('შეამოწმე ტელეფონის ნომერი', 'Проверьте номер телефона', 'Check the phone number'),
+  badCode: s('არასწორი კოდი', 'Неверный код', 'Wrong code'),
+  sendFail: s('SMS ვერ გაიგზავნა. სცადე მოგვიანებით ან დაგვირეკე.', 'Не удалось отправить SMS. Попробуйте позже или позвоните нам.', 'Could not send the SMS. Try again later or call us.'),
+  logout: s('გასვლა', 'Выйти', 'Sign out'),
+  orders: s('ჩემი შეკვეთები', 'Мои заказы', 'My orders'),
+  none: s('შეკვეთები ჯერ არ არის.', 'Заказов пока нет.', 'No orders yet.'),
+  newOrder: s('შეკვეთა', 'Сделать заказ', 'Place an order'),
+  period: s('პერიოდი', 'Период', 'Period'),
+  delivery: s('მიტანა', 'Доставка', 'Delivery'),
+  total: s('სულ', 'Итого', 'Total'),
+  pay: s('გადახდა', 'Оплатить', 'Pay now'),
+  upcoming: s('უახლოესი მენიუ', 'Ближайшее меню', 'Upcoming menu'),
+  paidOk: s('გადახდა მიღებულია. მადლობა!', 'Оплата получена. Спасибо!', 'Payment received. Thank you!'),
+  payFailed: s('გადახდა ვერ შესრულდა. სცადე ხელახლა.', 'Оплата не прошла. Попробуйте ещё раз.', 'The payment did not go through. Try again.'),
+  payUnavailable: s('ონლაინ გადახდა ჯერ არ არის ჩართული — მენეჯერი გამოგიგზავნით ბმულს.', 'Онлайн-оплата пока не подключена — менеджер пришлёт ссылку.', 'Online payment is not enabled yet — a manager will send you a link.'),
+  noDb: s('სერვისი დროებით მიუწვდომელია.', 'Сервис временно недоступен.', 'Service temporarily unavailable.'),
+  loading: s('იტვირთება…', 'Загрузка…', 'Loading…'),
+  back: s('შეკვეთაზე', 'К заказу', 'To ordering'),
+  payStatus: {
+    unpaid: s('გადასახდელი კურიერთან', 'Оплата курьеру', 'Pay on delivery'),
+    pending: s('გადახდის მოლოდინში', 'Ожидает оплаты', 'Awaiting payment'),
+    paid: s('გადახდილია', 'Оплачен', 'Paid'),
+    failed: s('გადახდა ვერ შესრულდა', 'Оплата не прошла', 'Payment failed'),
+  } as Record<string, Str>,
+  status: {
+    new: s('ახალი', 'Новый', 'New'),
+    confirmed: s('დადასტურებულია', 'Подтверждён', 'Confirmed'),
+    active: s('აქტიური', 'Активен', 'Active'),
+    completed: s('დასრულებულია', 'Завершён', 'Completed'),
+    cancelled: s('გაუქმებულია', 'Отменён', 'Cancelled'),
+  } as Record<string, Str>,
+  meal: {
+    breakfast: s('საუზმე', 'Завтрак', 'Breakfast'),
+    snack: s('სამხარი', 'Перекус', 'Snack'),
+    lunch: s('სადილი', 'Обед', 'Lunch'),
+    dinner: s('ვახშამი', 'Ужин', 'Dinner'),
+    dessert: s('დესერტი', 'Десерт', 'Dessert'),
+    smoothie: s('სმუზი', 'Смузи', 'Smoothie'),
+  } as Record<string, Str>,
+};
+
+interface OrderRow {
+  id: string;
+  program_title: string;
+  calories: number;
+  days: number;
+  start_date: string;
+  delivery_slot: string;
+  total: number;
+  payment_method: string;
+  payment_status: string;
+  status: string;
+  address: string;
+  created_at: string;
+}
 
 export default function AccountPage() {
-  const { locale, t } = useLanguage();
-  const { userSubscription, freezeTomorrow, orders, showToast } = useStore();
-  const [copied, setCopied] = useState(false);
+  const { locale: l, setLocale } = useLanguage();
+  const { dishes } = useRationDishes();
 
-  const handleCopyReferral = () => {
-    navigator.clipboard.writeText(`https://mealbox.ge/?ref=${userSubscription.referralCode}`);
-    setCopied(true);
-    showToast(locale === 'ru' ? 'Ссылка скопирована!' : locale === 'ka' ? 'ბმული კოპირებულია!' : 'Link copied!');
-    setTimeout(() => setCopied(false), 2500);
+  const [token, setToken] = useState<string | null>(null);
+  const [userPhone, setUserPhone] = useState('');
+  const [ready, setReady] = useState(false);
+  const [phone, setPhone] = useState('+995 ');
+  const [step, setStep] = useState<'phone' | 'code'>('phone');
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [orders, setOrders] = useState<OrderRow[] | null>(null);
+  const [banner, setBanner] = useState<'paid' | 'fail' | ''>('');
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('paid')) setBanner('paid');
+    else if (q.get('payfail')) setBanner('fail');
+
+    if (!isSupabaseConfigured) { setReady(true); return; }
+    supabase.auth.getSession().then(({ data }) => {
+      setToken(data.session?.access_token ?? null);
+      setUserPhone(data.session?.user?.phone ?? '');
+      setReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setToken(session?.access_token ?? null);
+      setUserPhone(session?.user?.phone ?? '');
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const loadOrders = useCallback(async () => {
+    const { data, error } = await supabase.from('site_orders').select('*').order('created_at', { ascending: false });
+    setOrders(error ? [] : (data as OrderRow[]));
+  }, []);
+
+  useEffect(() => {
+    if (token) loadOrders();
+    else setOrders(null);
+  }, [token, loadOrders]);
+
+  const digits = normalizePhone(phone);
+
+  const sendCode = async () => {
+    setMsg('');
+    if (!digits) { setMsg(A.badPhone[l]); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.signInWithOtp({ phone: `+${digits}` });
+    setBusy(false);
+    if (error) { setMsg(A.sendFail[l]); return; }
+    setStep('code');
   };
 
-  // Generate 10 upcoming days for the delivery schedule
-  const scheduleDays = [...Array(10)].map((_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayName = d.toLocaleDateString(locale === 'ka' ? 'ka-GE' : locale === 'en' ? 'en-US' : 'ru-RU', { weekday: 'short', month: 'numeric', day: 'numeric' });
+  const verify = async () => {
+    setMsg('');
+    setBusy(true);
+    const { error } = await supabase.auth.verifyOtp({ phone: `+${digits}`, token: code.trim(), type: 'sms' });
+    setBusy(false);
+    if (error) setMsg(A.badCode[l]);
+  };
 
-    const isFrozen = userSubscription.frozenDates.includes(dateStr);
-    let status = 'upcoming';
-    if (i === 0) status = 'delivered';
-    else if (i === 1) status = isFrozen ? 'frozen' : 'cooking';
-    else if (isFrozen) status = 'frozen';
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setStep('phone');
+    setCode('');
+  };
 
-    return {
-      dateStr,
-      dayName,
-      status,
-      calories: userSubscription.calories,
-    };
-  });
+  const pay = async (orderId: string) => {
+    setMsg('');
+    setBusy(true);
+    try {
+      const r = await fetch('/api/payments/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderId }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.url) { window.location.assign(j.url); return; }
+      setMsg(r.status === 503 ? A.payUnavailable[l] : A.payFailed[l]);
+    } catch {
+      setMsg(A.payFailed[l]);
+    }
+    setBusy(false);
+  };
+
+  // next days of the most recent active order
+  const upcoming = useMemo(() => {
+    const o = (orders || []).find(x => x.status !== 'cancelled' && x.status !== 'completed');
+    if (!o || !dishes.length) return [];
+    const start = new Date(o.start_date + 'T00:00:00');
+    const end = addDays(start, o.days - 1);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const from = start > today ? start : today;
+    const out: { date: Date; meals: ReturnType<typeof menuForDate> }[] = [];
+    for (let d = new Date(from); d <= end && out.length < 5; d = addDays(d, 1)) out.push({ date: new Date(d), meals: menuForDate(d, dishes) });
+    return out;
+  }, [orders, dishes]);
+
+  const LANGS: Locale[] = ['ka', 'ru', 'en'];
 
   return (
-    <div className="section-pad" style={{ padding: '60px 0 100px', background: 'var(--bg-page)' }}>
-      <div className="container" style={{ maxWidth: '1000px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '36px', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h1 style={{ fontSize: '34px', fontWeight: 800, color: 'var(--text-heading)' }}>
-              {t.account.title}
-            </h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-              {locale === 'ru'
-                ? 'Управление подпиской, график доставки и бонусы'
-                : locale === 'ka'
-                ? 'გამოწერის მართვა, მიტანის გრაფიკი და ბონუსები'
-                : 'Manage your subscription, delivery calendar and bonuses'}
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#FFFFFF', padding: '10px 18px', borderRadius: 'var(--radius-full)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-              {locale === 'ru' ? 'Бонусный баланс:' : locale === 'ka' ? 'ბონუს ბალანსი:' : 'Bonus Balance:'}
-            </span>
-            <span style={{ fontSize: '16px', fontWeight: 800, color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>
-              {userSubscription.bonusPointsGEL} GEL
-            </span>
-          </div>
-        </div>
-
-        {/* Subscription Status Card */}
-        <div className="account-subscription-card">
-          <div>
-            <span className="badge badge-emerald" style={{ marginBottom: '12px' }}>
-              <IconSparkles size={14} />
-              <span>{locale === 'ru' ? 'АКТИВНЫЙ РАЦИОН' : locale === 'ka' ? 'აქტიური რაციონი' : 'ACTIVE SUBSCRIPTION'}</span>
-            </span>
-            <h2 style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-heading)', marginBottom: '8px' }}>
-              {userSubscription.programTitle}
-            </h2>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-              {locale === 'ru' ? 'Адрес доставки:' : locale === 'ka' ? 'მიტანის მისამართი:' : 'Delivery address:'} {userSubscription.address} ({userSubscription.zoneName})
-            </p>
-
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <div style={{ background: '#FFFFFF', padding: '12px 20px', borderRadius: '14px', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                  {locale === 'ru' ? 'Осталось дней' : locale === 'ka' ? 'დარჩენილი დღეები' : 'Remaining Days'}
-                </div>
-                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>
-                  {userSubscription.remainingDays} / {userSubscription.totalDays}
-                </div>
-              </div>
-              <div style={{ background: '#FFFFFF', padding: '12px 20px', borderRadius: '14px', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                  {locale === 'ru' ? 'Калораж' : locale === 'ka' ? 'კალორიულობა' : 'Calories'}
-                </div>
-                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-heading)', fontFamily: 'var(--font-mono)' }}>
-                  {userSubscription.calories} {locale === 'ru' ? 'ккал' : locale === 'ka' ? 'კკალ' : 'kcal'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Freeze Fast Action Box */}
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: 'var(--radius-lg)',
-            padding: '24px',
-            border: '1.5px solid var(--border)',
-            boxShadow: 'var(--shadow-sm)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-              <IconPause size={18} style={{ color: 'var(--accent-gold)' }} />
-              <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-heading)' }}>
-                {locale === 'ru' ? 'Быстрая заморозка' : locale === 'ka' ? 'სწრაფი გაყინვა' : 'Fast Freeze'}
-              </h3>
-            </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '18px' }}>
-              {locale === 'ru'
-                ? 'Заморозьте доставку на завтра бесплатно (до 21:00 сегодня). Дни не сгорают.'
-                : locale === 'ka'
-                ? 'გაყინეთ ხვალინდელი მიტანა უფასოდ (დღეს 21:00-მდე). დღეები არ იკარგება.'
-                : 'Pause tomorrow delivery for free (before 21:00 today). Your days are saved.'}
-            </p>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ width: '100%', justifyContent: 'center' }}
-              onClick={freezeTomorrow}
-            >
-              {locale === 'ru' ? 'Заморозить день' : locale === 'ka' ? 'დღის გაყინვა' : 'Freeze Day'}
-            </button>
-          </div>
-        </div>
-
-        {/* Delivery Schedule Calendar */}
-        <div style={{ background: '#FFFFFF', padding: '32px', borderRadius: 'var(--radius-xl)', border: '1.5px solid var(--border)', marginBottom: '32px', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
-            <IconCalendar size={22} style={{ color: 'var(--accent-green)' }} />
-            <h3 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-heading)' }}>
-              {locale === 'ru' ? 'График и статус доставки' : locale === 'ka' ? 'მიტანის გრაფიკი & სტატუსი' : 'Delivery Schedule & Status'}
-            </h3>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '14px' }}>
-            {scheduleDays.map((item, idx) => (
-              <div
-                key={idx}
-                style={{
-                  background: item.status === 'frozen' ? 'var(--accent-coral-light)' : 'var(--bg-surface)',
-                  border: item.status === 'cooking' ? '1.5px solid var(--accent-green)' : '1px solid var(--border)',
-                  padding: '16px',
-                  borderRadius: '14px',
-                }}
-              >
-                <div style={{ fontSize: '14px', fontWeight: 800, marginBottom: '4px', color: 'var(--text-heading)', textTransform: 'capitalize' }}>
-                  {item.dayName}
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                  {item.calories} {locale === 'ru' ? 'ккал' : locale === 'ka' ? 'კკალ' : 'kcal'}
-                </div>
-
-                {item.status === 'delivered' && (
-                  <span className="badge badge-emerald" style={{ fontSize: '10px' }}>
-                    <IconCheck size={12} />
-                    <span>{locale === 'ru' ? 'Доставлен' : locale === 'ka' ? 'მიტანილია' : 'Delivered'}</span>
-                  </span>
-                )}
-                {item.status === 'cooking' && (
-                  <span className="badge badge-gold" style={{ fontSize: '10px' }}>
-                    <IconChef size={12} />
-                    <span>{locale === 'ru' ? 'На кухне' : locale === 'ka' ? 'მზადდება' : 'Cooking'}</span>
-                  </span>
-                )}
-                {item.status === 'frozen' && (
-                  <span className="badge badge-coral" style={{ fontSize: '10px' }}>
-                    {locale === 'ru' ? 'Пауза' : locale === 'ka' ? 'შეჩერებულია' : 'Frozen'}
-                  </span>
-                )}
-                {item.status === 'upcoming' && (
-                  <span className="badge badge-dark" style={{ fontSize: '10px' }}>
-                    {locale === 'ru' ? 'По расписанию' : locale === 'ka' ? 'დაგეგმილია' : 'Scheduled'}
-                  </span>
-                )}
-              </div>
+    <div className="ord-root">
+      <header className="ord-header">
+        <Link href="/" className="ord-brand" aria-label="FitFood">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/logo-white.png" alt="FitFood" />
+        </Link>
+        <div className="ord-head-right">
+          <a href={CONTACT.phoneHref} className="ord-hcontact icon" aria-label={CONTACT.phone}><Phone size={16} /></a>
+          <Link href="/" className="ord-back"><ArrowLeft size={16} /><span>{A.back[l]}</span></Link>
+          <div className="ord-lang" role="group" aria-label="Language">
+            {LANGS.map(c => (
+              <button key={c} type="button" aria-pressed={l === c} onClick={() => setLocale(c)}>{c.toUpperCase()}</button>
             ))}
           </div>
         </div>
+      </header>
 
-        {/* Gift & Referral Program Section */}
-        <div style={{
-          background: '#FFFFFF',
-          border: '1.5px solid var(--border)',
-          borderRadius: 'var(--radius-xl)',
-          padding: '32px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '24px',
-          boxShadow: 'var(--shadow-sm)',
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <IconGift size={20} style={{ color: 'var(--accent-gold)' }} />
-              <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-heading)' }}>
-                {locale === 'ru' ? 'Подарите другу скидку 10%' : locale === 'ka' ? 'აჩუქეთ მეგობარს 10% ფასდაკლება' : 'Gift 10% Discount to a Friend'}
-              </h3>
-            </div>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '520px' }}>
-              {locale === 'ru'
-                ? 'Делитесь промокодом: друг получит скидку 10% на первый заказ, а вы — 30 GEL на бонусный баланс.'
-                : locale === 'ka'
-                ? 'გაუზიარეთ პრომოკოდი: მეგობარი მიიღებს 10%-იან ფასდაკლებას, თქვენ კი 30 GEL ბონუს ბალანსზე.'
-                : 'Share your code: your friend gets 10% off their first order, and you get 30 GEL bonus points.'}
-            </p>
-          </div>
+      <main className="acc-main">
+        <h1 className="acc-title">{A.title[l]}</h1>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              background: 'var(--bg-surface)',
-              border: '1.5px solid var(--border)',
-              padding: '12px 18px',
-              borderRadius: 'var(--radius-md)',
-              fontWeight: 800,
-              fontSize: '15px',
-              color: 'var(--text-heading)',
-              fontFamily: 'var(--font-mono)',
-              letterSpacing: '1px',
-            }}>
-              {userSubscription.referralCode}
+        {banner === 'paid' && <div className="acc-banner ok">{A.paidOk[l]}</div>}
+        {banner === 'fail' && <div className="ord-error">{A.payFailed[l]}</div>}
+        {!isSupabaseConfigured && <div className="ord-error">{A.noDb[l]}</div>}
+
+        {!ready ? (
+          <p className="ord-note">{A.loading[l]}</p>
+        ) : !token ? (
+          <section className="ord-card acc-login">
+            {step === 'phone' ? (
+              <>
+                <p className="ord-hint" style={{ margin: '0 0 14px' }}>{A.loginSub[l]}</p>
+                <label className="acc-label" htmlFor="acc-phone">{A.phone[l]}</label>
+                <input id="acc-phone" className="ord-input" type="tel" inputMode="tel" autoComplete="tel" value={phone}
+                  onChange={e => setPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendCode()} />
+                <button type="button" className="ord-submit" style={{ marginTop: 14 }} onClick={sendCode} disabled={busy}>{A.sendCode[l]}</button>
+              </>
+            ) : (
+              <>
+                <p className="ord-hint" style={{ margin: '0 0 14px' }}>{A.codeSent[l]} +{digits}</p>
+                <label className="acc-label" htmlFor="acc-code">{A.code[l]}</label>
+                <input id="acc-code" className="ord-input" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={code}
+                  onChange={e => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={e => e.key === 'Enter' && verify()} />
+                <button type="button" className="ord-submit" style={{ marginTop: 14 }} onClick={verify} disabled={busy || code.length < 4}>{A.confirm[l]}</button>
+                <button type="button" className="ord-btn-ghost" style={{ marginTop: 10, width: '100%' }} onClick={() => { setStep('phone'); setCode(''); setMsg(''); }}>{A.change[l]}</button>
+              </>
+            )}
+            {msg && <div className="ord-error" style={{ marginTop: 12 }} role="alert">{msg}</div>}
+          </section>
+        ) : (
+          <>
+            <div className="acc-bar">
+              <span>+{userPhone}</span>
+              <button type="button" className="ord-btn-ghost" onClick={logout}><LogOut size={15} style={{ marginRight: 6, verticalAlign: -2 }} />{A.logout[l]}</button>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleCopyReferral}
-            >
-              {copied
-                ? (locale === 'ru' ? 'Скопировано!' : locale === 'ka' ? 'კოპირებულია!' : 'Copied!')
-                : (locale === 'ru' ? 'Копировать' : locale === 'ka' ? 'კოპირება' : 'Copy')}
-            </button>
-          </div>
-        </div>
-      </div>
+            {msg && <div className="ord-error" role="alert">{msg}</div>}
+
+            <h2 className="acc-h2">{A.orders[l]}</h2>
+            {orders === null ? (
+              <p className="ord-note">{A.loading[l]}</p>
+            ) : orders.length === 0 ? (
+              <section className="ord-card">
+                <p className="ord-hint" style={{ margin: '0 0 14px' }}>{A.none[l]}</p>
+                <Link href="/" className="ord-cta" style={{ textDecoration: 'none' }}>{A.newOrder[l]}</Link>
+              </section>
+            ) : (
+              <div className="acc-orders">
+                {orders.map(o => {
+                  const start = new Date(o.start_date + 'T00:00:00');
+                  const needsPay = o.payment_method === 'online' && o.payment_status !== 'paid' && o.status !== 'cancelled';
+                  return (
+                    <article key={o.id} className="ord-card acc-order">
+                      <div className="acc-order-head">
+                        <b>{o.id}</b>
+                        <span className={`acc-pill ${o.payment_status}`}>{A.payStatus[o.payment_status]?.[l] ?? o.payment_status}</span>
+                        <span className="acc-pill">{A.status[o.status]?.[l] ?? o.status}</span>
+                      </div>
+                      <div className="ord-row"><span>{o.program_title}</span><b>{o.calories} · {o.days}</b></div>
+                      <div className="ord-row"><span>{A.period[l]}</span><b>{fmtDate(start, l, { day: 'numeric', month: 'short' })} – {fmtDate(addDays(start, o.days - 1), l, { day: 'numeric', month: 'short' })}</b></div>
+                      <div className="ord-row"><span>{A.delivery[l]}</span><b>{o.delivery_slot}</b></div>
+                      <div className="ord-row"><span>{A.total[l]}</span><b style={{ color: 'var(--o-lime)' }}>{o.total} GEL</b></div>
+                      {needsPay && (
+                        <button type="button" className="ord-submit" style={{ marginTop: 14 }} onClick={() => pay(o.id)} disabled={busy}>
+                          <CreditCard size={18} /> {A.pay[l]} · {o.total} GEL
+                        </button>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+
+            {upcoming.length > 0 && (
+              <>
+                <h2 className="acc-h2">{A.upcoming[l]}</h2>
+                <div className="acc-days">
+                  {upcoming.map(({ date, meals }) => (
+                    <section key={dayKey(date)} className="ord-card acc-day">
+                      <h3>{fmtDate(date, l, { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
+                      {meals.length === 0 ? <p className="ord-note">—</p> : meals.map(m => (
+                        <div key={m.id} className="acc-meal">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={m.image} alt="" loading="lazy" />
+                          <div>
+                            <small>{A.meal[m.mealType]?.[l] ?? m.mealType}</small>
+                            <b>{m.name[l]}</b>
+                            <span>{m.macros.calories} · {m.macros.protein}/{m.macros.fat}/{m.macros.carbs}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </section>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </main>
     </div>
   );
 }

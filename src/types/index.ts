@@ -56,15 +56,11 @@ export interface Dish {
   reviews: DishReview[];
   rating: number;
   swappableWith?: string[]; // IDs of dishes that can replace this one
-  /** Ration cycle this dish belongs to. Undefined / 1 = classic week, 2 = second week of the 2-week cycle. */
-  week?: 1 | 2;
-  /** Sold only inside rations (meal plans) — never as a stand-alone hall / partner product. */
+  /** Sold only inside rations (meal plans) — channel "site" without "pos". */
   rationOnly?: boolean;
-  /** Kitchen tech-card imported from the recipe workbook (Georgian). */
-  recipe?: {
-    ingredientLines: string[];
-    methodLines: string[];
-  };
+  /** Where the dish is sold, as stored in the database ("site" = rations, "pos" = hall showcase). */
+  channels?: string[];
+  sortOrder?: number;
 }
 
 export interface Program {

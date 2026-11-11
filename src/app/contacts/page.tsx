@@ -164,8 +164,8 @@ export default function ContactsPage() {
                 </div>
                 <div>
                   <div className="contacts-info-title">{locale === 'ru' ? 'Горячая линия' : locale === 'ka' ? 'ტელეფონი' : 'Direct Line'}</div>
-                  <a href="tel:+995599000000" className="contacts-info-text" style={{ color: '#0F172A' }}>
-                    +995 599 00-00-00
+                  <a href="tel:+995596569999" className="contacts-info-text" style={{ color: '#0F172A' }}>
+                    +995 596 56 99 99
                   </a>
                   <div className="contacts-info-sub">{locale === 'ru' ? 'Ежедневно 07:00 – 22:00' : locale === 'ka' ? 'ყოველდღე 07:00 – 22:00' : 'Daily 07:00 – 22:00'}</div>
                 </div>
@@ -300,7 +300,7 @@ export default function ContactsPage() {
                     required
                     className="faq-search-input"
                     style={{ padding: '12px 16px' }}
-                    placeholder="+995 599 00-00-00 / @username"
+                    placeholder="+995 596 56 99 99 / @username"
                     value={formContact}
                     onChange={e => setFormContact(e.target.value)}
                   />

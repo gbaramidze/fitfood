@@ -12,6 +12,8 @@ const nextConfig = {
   },
   async redirects() {
     return [
+      // the order page now IS the home page
+      { source: '/order', destination: '/', permanent: false },
       {
         source: '/patrner',
         destination: '/partner',

@@ -9,13 +9,14 @@ import { T } from './orderData';
 interface Props {
   locale: Locale;
   current: Dish;
+  pool: Dish[];
   /** returns the stop-list names a dish conflicts with (empty = safe) */
   conflicts: (d: Dish) => string[];
   onPick: (d: Dish) => void;
   onClose: () => void;
 }
 
-export function SwapSheet({ locale, current, conflicts, onPick, onClose }: Props) {
+export function SwapSheet({ locale, current, pool, conflicts, onPick, onClose }: Props) {
   const [safeOnly, setSafeOnly] = useState(false);
 
   useEffect(() => {
@@ -29,7 +30,7 @@ export function SwapSheet({ locale, current, conflicts, onPick, onClose }: Props
     };
   }, [onClose]);
 
-  const list = swapCandidates(current)
+  const list = swapCandidates(current, pool)
     .map(d => ({ d, bad: conflicts(d) }))
     .filter(x => !safeOnly || x.bad.length === 0)
     .sort((a, b) => a.bad.length - b.bad.length);

@@ -4,21 +4,24 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link';
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Clock, Dumbbell, Flame, Leaf,
-  Repeat, ShieldCheck, Sparkles, Zap, Plus, X, MapPin, ChefHat, Truck,
+  Repeat, ShieldCheck, Sparkles, Zap, Plus, X, MapPin, ChefHat, Truck, Phone, Play, User,
 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { Dish, Locale, Program } from '@/types';
 import { programs } from '@/data/programs';
 import { batumiZones } from '@/data/batumiZones';
 import { ALLERGENS_DATABASE } from '@/data/allergensList';
-import { allRationDishes, cycleWeek, menuForDate } from '@/lib/rationRotation';
+import { menuForDate } from '@/lib/rationRotation';
+import { useRationDishes, videoSrc } from '@/lib/rationDishesService';
 import { kitchenDbService } from '@/services/kitchenDbService';
 import { KitchenClient } from '@/types/kitchen';
 import {
-  CALORIE_OPTIONS, DURATIONS, SLOTS, PayId, SlotId, T, addDays, dayKey, fmtDate,
+  CALORIE_OPTIONS, CONTACT, DURATIONS, SLOTS, PayId, SlotId, T, addDays, dayKey, fmtDate, tierPrice,
 } from './orderData';
 import { SwapSheet } from './SwapSheet';
 import { SignatureFilms } from './SignatureFilms';
+import { DishVideoModal } from './DishVideoModal';
+import { Calendar } from './Calendar';
 import './order.css';
 
 const LANGS: { code: Locale; label: string }[] = [
@@ -26,6 +29,15 @@ const LANGS: { code: Locale; label: string }[] = [
   { code: 'ru', label: 'RU' },
   { code: 'en', label: 'EN' },
 ];
+
+const InstagramIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+/** "Chicken fillet — 130 g" -> "Chicken fillet" (the database keeps weights inside the ingredient lines) */
+const plainIngredient = (x: string) => x.replace(/\s*[—–]\s*[\d.,]+\s*(გ|მლ|г|мл|g|ml)\.?\s*$/i, '').trim();
 
 const PROGRAM_ICON: Record<string, React.ReactNode> = {
   'prog-slim': <Flame size={20} />,
@@ -40,10 +52,11 @@ const QUICK_ALLERGENS = [
   'soy', 'mushrooms', 'tomatoes', 'chicken', 'beef', 'avocado', 'honey', 'strawberries_berries',
 ];
 
-const PAY_LABEL: Record<PayId, 'payCash' | 'payCard' | 'payLink'> = { cash: 'payCash', card: 'payCard', link: 'payLink' };
+const PAY_LABEL: Record<PayId, 'payCash' | 'payCard' | 'payOnline'> = { cash: 'payCash', card: 'payCard', online: 'payOnline' };
 
 export function OrderExperience() {
   const { locale: l, setLocale } = useLanguage();
+  const { dishes, status: menuStatus } = useRationDishes(); // the live menu from the database
   const builderRef = useRef<HTMLDivElement>(null);
 
   const [mounted, setMounted] = useState(false);
@@ -54,25 +67,26 @@ export function OrderExperience() {
   const [calories, setCalories] = useState(1800);
   const [duration, setDuration] = useState(12);
   const [startKey, setStartKey] = useState('');
-  const [slot, setSlot] = useState<SlotId>('morning');
+  const [slot, setSlot] = useState<SlotId>('e20');
   const [stopIds, setStopIds] = useState<string[]>([]);
   const [customStops, setCustomStops] = useState<string[]>([]);
   const [customDraft, setCustomDraft] = useState('');
   const [swaps, setSwaps] = useState<Record<string, string>>({}); // `${date}|${meal}` -> dishId
   const [menuDay, setMenuDay] = useState(0);
-  const [swapFor, setSwapFor] = useState<{ key: string; dish: Dish } | null>(null);
+  const [swapFor, setSwapFor] = useState<{ key: string; dish: Dish; baseId: string } | null>(null);
+  const [videoDish, setVideoDish] = useState<Dish | null>(null);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [zoneId, setZoneId] = useState(batumiZones[0].id);
   const [address, setAddress] = useState('');
   const [comment, setComment] = useState('');
-  const [pay, setPay] = useState<PayId>('cash');
+  const [pay, setPay] = useState<PayId>('online');
   const [touched, setTouched] = useState<Set<number>>(new Set());
   const [tried, setTried] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  const [done, setDone] = useState<null | { id: string; total: number }>(null);
+  const [done, setDone] = useState<null | { id: string; total: number; awaitingLink?: boolean }>(null);
 
   const touch = useCallback((n: number) => setTouched(p => (p.has(n) ? p : new Set(p).add(n))), []);
 
@@ -106,10 +120,9 @@ export function OrderExperience() {
   const program: Program = programs.find(p => p.id === programId) ?? programs[0];
   const accent = program.accentColor;
   const durCfg = DURATIONS.find(d => d.days === duration) ?? DURATIONS[2];
-  const price = program.prices[durCfg.key] as number;
+  const price = tierPrice(program.prices[durCfg.key] as number, program.id, calories);
   const zone = batumiZones.find(z => z.id === zoneId) ?? batumiZones[0];
   const total = price + zone.priceGEL;
-  const perDay = (days: number, key: (typeof DURATIONS)[number]['key']) => Math.round((program.prices[key] as number) / days);
   const trialPerDay = (program.prices.trialTwoDays as number) / 2;
 
   const startDate = useMemo(() => {
@@ -118,8 +131,7 @@ export function OrderExperience() {
     return new Date(y, m - 1, d);
   }, [startKey, earliest]);
 
-  const dateOptions = useMemo(() => Array.from({ length: 14 }, (_, i) => addDays(earliest, i)), [earliest]);
-  const menuDates = useMemo(() => Array.from({ length: Math.min(duration, 14) }, (_, i) => addDays(startDate, i)), [startDate, duration]);
+  const menuDates = useMemo(() => Array.from({ length: Math.min(duration, 7) }, (_, i) => addDays(startDate, i)), [startDate, duration]);
   const endDate = addDays(startDate, duration - 1);
 
   const stopNames = useMemo(
@@ -152,13 +164,13 @@ export function OrderExperience() {
   );
 
   const effectiveMenu = useCallback(
-    (date: Date): { key: string; dish: Dish; swapped: boolean }[] =>
-      menuForDate(date).map(base => {
-        const key = `${dayKey(date)}|${base.mealType}`;
-        const picked = swaps[key] ? allRationDishes.find(d => d.id === swaps[key]) : undefined;
-        return { key, dish: picked ?? base, swapped: Boolean(picked) };
+    (date: Date): { key: string; baseId: string; dish: Dish; swapped: boolean }[] =>
+      menuForDate(date, dishes).map(base => {
+        const key = `${dayKey(date)}|${base.id}`;
+        const picked = swaps[key] ? dishes.find(d => d.id === swaps[key]) : undefined;
+        return { key, baseId: base.id, dish: picked ?? base, swapped: Boolean(picked) };
       }),
-    [swaps]
+    [swaps, dishes]
   );
 
   const dayMenu = useMemo(() => effectiveMenu(menuDates[Math.min(menuDay, menuDates.length - 1)] ?? startDate), [effectiveMenu, menuDates, menuDay, startDate]);
@@ -171,7 +183,7 @@ export function OrderExperience() {
 
   const phoneOk = phone.replace(/\D/g, '').length >= 9;
   const contactOk = name.trim().length > 1 && phoneOk && address.trim().length > 3;
-  const progress = Math.round(((touched.size + (contactOk ? 1 : 0)) / 7) * 100);
+  const progress = Math.round(((touched.size + (contactOk ? 1 : 0)) / 6) * 100);
 
   // ── handlers ──
   const pickProgram = (p: Program) => {
@@ -182,13 +194,13 @@ export function OrderExperience() {
   };
   const toggleStop = (id: string) => {
     setStopIds(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id]));
-    touch(5);
+    touch(4);
   };
   const addCustom = () => {
     const v = customDraft.trim();
     if (v && !customStops.includes(v)) setCustomStops(p => [...p, v]);
     setCustomDraft('');
-    touch(5);
+    touch(4);
   };
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -197,25 +209,59 @@ export function OrderExperience() {
     setError('');
     if (!contactOk) {
       setError(!phoneOk && phone ? T.badPhone[l] : T.fillRequired[l]);
-      scrollTo('step-7');
+      scrollTo('step-6');
       return;
     }
     setSending(true);
-    const id = `FF-${Math.floor(100000 + Math.random() * 900000)}`;
     const slotLabel = SLOTS.find(s => s.id === slot)!.time;
     const swapNotes = Object.entries(swaps).map(([k, dishId]) => {
-      const [date, meal] = k.split('|');
-      const dish = allRationDishes.find(d => d.id === dishId);
-      return `${date} ${T.mealName[meal]?.ru ?? meal} → ${dish?.name.ru ?? dishId}`;
+      const [date, baseId] = k.split('|');
+      const base = dishes.find(d => d.id === baseId);
+      const dish = dishes.find(d => d.id === dishId);
+      return `${date} ${base?.name.ru ?? baseId} → ${dish?.name.ru ?? dishId}`;
     });
+
+    // The server stores the order, calculates the price, notifies the team and (for online payment) creates the card link.
+    let res: { orderId: string; total: number; saved: boolean; notified: boolean; payUrl: string | null } | null = null;
+    try {
+      const r = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: name.trim(),
+          phone: phone.trim(),
+          address: address.trim(),
+          zoneId: zone.id,
+          programId: program.id,
+          calories,
+          days: duration,
+          startDate: dayKey(startDate),
+          slot: slotLabel,
+          stopList: stopNames,
+          swaps: swapNotes,
+          comment: comment.trim(),
+          payment: pay,
+          language: l,
+        }),
+      });
+      if (r.ok) res = await r.json();
+    } catch { /* handled below */ }
+
+    if (!res || (!res.saved && !res.notified)) {
+      setSending(false);
+      setError(l === 'ru' ? 'Не удалось отправить заказ. Проверьте интернет и попробуйте ещё раз.' : l === 'ka' ? 'შეკვეთა ვერ გაიგზავნა. სცადე ხელახლა.' : 'Could not send the order. Check your connection and try again.');
+      return;
+    }
+
+    // Kitchen client card (what the kitchen tablet and couriers work from).
     const notes = [
+      `🕗 ${slotLabel}`,
       stopNames.length ? `Стоп-лист: ${stopNames.join(', ')}` : '',
       swapNotes.length ? `Замены: ${swapNotes.join('; ')}` : '',
       comment.trim(),
     ].filter(Boolean).join(' | ');
-
     const client: KitchenClient = {
-      id,
+      id: res.orderId,
       clientName: name.trim(),
       phone: phone.trim(),
       address: address.trim(),
@@ -225,51 +271,24 @@ export function OrderExperience() {
       calories,
       totalDays: duration,
       deliveredDays: 0,
-      deliverySlot: slot,
+      deliverySlot: 'evening',
       startDate: dayKey(startDate),
       status: 'active',
       notes: notes || undefined,
       createdAt: new Date().toISOString(),
     };
+    await kitchenDbService.upsertClient(client).catch(() => false);
 
-    const [tg, db] = await Promise.all([
-      fetch('/api/telegram/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'ration_order',
-          data: {
-            orderId: id,
-            customerName: client.clientName,
-            phone: client.phone,
-            program: program.title.ru,
-            calories,
-            days: duration,
-            startDate: client.startDate,
-            slot: slotLabel,
-            zone: zone.name.ru,
-            address: client.address,
-            payment: T[PAY_LABEL[pay]].ru,
-            total,
-            stopList: stopNames,
-            swaps: swapNotes,
-            comment: comment.trim(),
-            language: l,
-          },
-        }),
-      }).then(r => r.ok).catch(() => false),
-      kitchenDbService.upsertClient(client).catch(() => false),
-    ]);
+    try {
+      localStorage.setItem('fitfood_last_order', JSON.stringify({ ...client, total: res.total, pay }));
+    } catch { /* storage may be unavailable */ }
 
-    setSending(false);
-    if (!tg && !db) {
-      setError(l === 'ru' ? 'Не удалось отправить заказ. Проверьте интернет и попробуйте ещё раз.' : l === 'ka' ? 'შეკვეთა ვერ გაიგზავნა. სცადე ხელახლა.' : 'Could not send the order. Check your connection and try again.');
+    if (res.payUrl) {
+      window.location.assign(res.payUrl); // off to the bank's card page
       return;
     }
-    try {
-      localStorage.setItem('fitfood_last_order', JSON.stringify({ ...client, total, pay }));
-    } catch { /* storage may be unavailable */ }
-    setDone({ id, total });
+    setSending(false);
+    setDone({ id: res.orderId, total: res.total, awaitingLink: pay === 'online' });
     window.scrollTo({ top: 0 });
   };
 
@@ -284,7 +303,13 @@ export function OrderExperience() {
         <span className="ord-brand-tag">{T.brandTag[l]}</span>
       </Link>
       <div className="ord-head-right">
-        <Link href="/" className="ord-back"><ArrowLeft size={16} /><span>{T.back[l]}</span></Link>
+        <a href={CONTACT.phoneHref} className="ord-hcontact" aria-label={`${T.callUs[l]} ${CONTACT.phone}`}>
+          <Phone size={16} /><span>{CONTACT.phone}</span>
+        </a>
+        <a href={CONTACT.instagram} target="_blank" rel="noopener noreferrer" className="ord-hcontact icon" aria-label="Instagram">
+          <InstagramIcon size={17} />
+        </a>
+        <Link href="/account" className="ord-hcontact icon" aria-label={T.account[l]} title={T.account[l]}><User size={17} /></Link>
         <div className="ord-lang" role="group" aria-label="Language">
           {LANGS.map(x => (
             <button key={x.code} type="button" aria-pressed={l === x.code} onClick={() => setLocale(x.code)}>{x.label}</button>
@@ -303,14 +328,14 @@ export function OrderExperience() {
           <div className="ord-done-card">
             <div className="ord-done-ico"><Check size={42} strokeWidth={3} /></div>
             <h1>{T.doneTitle[l]}</h1>
-            <p>{T.doneSub[l]}</p>
+            <p>{done.awaitingLink ? T.doneLink[l] : T.doneSub[l]}</p>
             <div className="ord-done-no">{T.orderNo[l]} {done.id}</div>
             <div className="ord-row"><span>{T.sProgram[l]}</span><b>{program.title[l]} · {calories} {T.kcal[l]}</b></div>
             <div className="ord-row"><span>{T.sPeriod[l]}</span><b>{fmtDate(startDate, l, { day: 'numeric', month: 'short' })} – {fmtDate(endDate, l, { day: 'numeric', month: 'short' })}</b></div>
             <div className="ord-row"><span>{T.sDelivery[l]}</span><b>{SLOTS.find(s => s.id === slot)?.time}</b></div>
             <div className="ord-row"><span>{T.total[l]}</span><b style={{ color: 'var(--o-lime)' }}>{done.total} GEL</b></div>
             <div className="ord-done-actions">
-              <Link href="/" className="ord-cta sec">{T.back[l]}</Link>
+              <Link href="/account" className="ord-cta sec">{T.account[l]}</Link>
               <button type="button" className="ord-cta" onClick={() => { setDone(null); setTouched(new Set()); setTried(false); setSwaps({}); }}>{T.newOrder[l]}</button>
             </div>
           </div>
@@ -321,8 +346,8 @@ export function OrderExperience() {
 
   const stepHead = (n: number, title: string) => (
     <div className="ord-card-head">
-      <span className={`ord-num ${touched.has(n) || (n === 7 && contactOk) ? 'done' : ''}`}>
-        {touched.has(n) || (n === 7 && contactOk) ? <Check size={17} strokeWidth={3} /> : n}
+      <span className={`ord-num ${touched.has(n) || (n === 6 && contactOk) ? 'done' : ''}`}>
+        {touched.has(n) || (n === 6 && contactOk) ? <Check size={17} strokeWidth={3} /> : n}
       </span>
       <h2>{title}</h2>
     </div>
@@ -351,12 +376,6 @@ export function OrderExperience() {
           <button type="button" className="ord-cta" onClick={() => scrollTo('builder')}>
             {T.heroCta[l]} <ArrowRight size={20} />
           </button>
-          <div className="ord-stats">
-            <div className="ord-stat"><b>14+</b><span>{T.stat1[l]}</span></div>
-            <div className="ord-stat"><b>{allRationDishes.length}</b><span>{T.stat4[l]}</span></div>
-            <div className="ord-stat"><b>100%</b><span>{T.stat2[l]}</span></div>
-            <div className="ord-stat"><b>Batumi</b><span>{T.stat3[l]}</span></div>
-          </div>
         </div>
       </section>
 
@@ -370,7 +389,7 @@ export function OrderExperience() {
             {stepHead(1, T.s1[l])}
             <div className="ord-programs">
               {programs.map(p => {
-                const min = Math.min(...DURATIONS.map(d => (p.prices[d.key] as number) / d.days));
+                const min = tierPrice(Math.min(...DURATIONS.map(d => (p.prices[d.key] as number) / d.days)), p.id, CALORIE_OPTIONS[p.id][0].cal);
                 return (
                   <button
                     key={p.id} type="button" className="ord-prog"
@@ -379,8 +398,8 @@ export function OrderExperience() {
                   >
                     {p.popular && <span className="ord-badge">{T.popular[l]}</span>}
                     <div className="ord-prog-ico">{PROGRAM_ICON[p.id]}</div>
-                    <h3>{p.title[l]}</h3>
-                    <small>{p.target[l]}</small>
+                    <h3>{p.title[l].split(' (')[0]}</h3>
+                    <small>{(p.title[l].match(/\((.*)\)/) || [])[1] || ''}</small>
                     <div className="ord-prog-foot">
                       <span>{p.mealsPerDay} {T.mealsDay[l]}</span>
                       <span>{T.from[l]} <b>{Math.round(min)}</b> GEL/{T.perDay[l]}</span>
@@ -391,7 +410,7 @@ export function OrderExperience() {
             </div>
           </section>
 
-          {/* 2 — calories */}
+          {/* 2 — calories & duration */}
           <section className="ord-card" id="step-2">
             {stepHead(2, T.s2[l])}
             <div className="ord-chips">
@@ -402,58 +421,53 @@ export function OrderExperience() {
                 </button>
               ))}
             </div>
-          </section>
-
-          {/* 3 — duration */}
-          <section className="ord-card" id="step-3">
-            {stepHead(3, T.s3[l])}
             <div className="ord-durs">
               {DURATIONS.map(d => {
-                const pd = (program.prices[d.key] as number) / d.days;
-                const saving = Math.round((1 - pd / trialPerDay) * 100);
+                const full = tierPrice(program.prices[d.key] as number, program.id, calories);
+                const saving = Math.round((1 - (program.prices[d.key] as number) / d.days / trialPerDay) * 100);
                 return (
-                  <button key={d.days} type="button" className="ord-dur" aria-pressed={d.days === duration} onClick={() => { setDuration(d.days); setMenuDay(0); touch(3); }}>
+                  <button key={d.days} type="button" className="ord-dur" aria-pressed={d.days === duration} onClick={() => { setDuration(d.days); setMenuDay(0); touch(2); }}>
                     {saving > 0 && <span className="save">-{saving}%</span>}
                     <b>{d.days}</b>
                     <span>{d.days === 2 ? T.trial[l] : T.days[l]}</span>
-                    <em>{program.prices[d.key] as number} GEL</em>
-                    <span style={{ margin: '2px 0 0' }}>{Math.round(pd)}/{T.perDay[l]}</span>
+                    <em>{full} GEL</em>
                   </button>
                 );
               })}
             </div>
           </section>
 
-          {/* 4 — start & delivery */}
-          <section className="ord-card" id="step-4">
-            {stepHead(4, T.s4[l])}
-            <span className="ord-label">{T.startDate[l]}</span>
-            <div className="ord-dates">
-              {mounted && dateOptions.map(d => (
-                <button key={dayKey(d)} type="button" className="ord-date" aria-pressed={dayKey(d) === startKey} onClick={() => { setStartKey(dayKey(d)); setMenuDay(0); touch(4); }}>
-                  <small>{fmtDate(d, l, { weekday: 'short' })}</small>
-                  <b>{d.getDate()}</b>
-                  <small>{fmtDate(d, l, { month: 'short' })}</small>
-                </button>
-              ))}
-            </div>
-            <p className="ord-note">{T.startHint[l]}</p>
-            <span className="ord-label">{T.slot[l]}</span>
-            <div className="ord-slots">
-              {SLOTS.map(s => (
-                <button key={s.id} type="button" className="ord-slot" aria-pressed={s.id === slot} onClick={() => { setSlot(s.id); touch(4); }}>
-                  <Clock size={15} /> {s.time}
-                </button>
-              ))}
+          {/* 3 — start & delivery */}
+          <section className="ord-card" id="step-3">
+            {stepHead(3, T.s4[l])}
+            <div className="ord-start">
+              <div>
+                <span className="ord-label">{T.startDate[l]}</span>
+                {mounted && (
+                  <Calendar locale={l} value={startDate} min={earliest} days={duration}
+                    onChange={d => { setStartKey(dayKey(d)); setMenuDay(0); touch(3); }} />
+                )}
+              </div>
+              <div>
+                <span className="ord-label">{T.slot[l]}</span>
+                <div className="ord-slots">
+                  {SLOTS.map(sl => (
+                    <button key={sl.id} type="button" className="ord-slot" aria-pressed={sl.id === slot} onClick={() => { setSlot(sl.id); touch(3); }}>
+                      <Clock size={15} /> {sl.time}
+                    </button>
+                  ))}
+                </div>
+                <p className="ord-note">{T.startHint[l]}</p>
+              </div>
             </div>
           </section>
 
           {/* 5 — allergies */}
-          <section className="ord-card" id="step-5">
-            {stepHead(5, T.s5[l])}
+          <section className="ord-card" id="step-4">
+            {stepHead(4, T.s5[l])}
             <p className="ord-hint">{T.stopHint[l]}</p>
             <div className="ord-chips">
-              <button type="button" className="ord-chip sm" aria-pressed={!stopIds.length && !customStops.length} onClick={() => { setStopIds([]); setCustomStops([]); touch(5); }}>
+              <button type="button" className="ord-chip sm" aria-pressed={!stopIds.length && !customStops.length} onClick={() => { setStopIds([]); setCustomStops([]); touch(4); }}>
                 <Check size={14} /> {T.noneStop[l]}
               </button>
               {QUICK_ALLERGENS.map(id => {
@@ -483,15 +497,17 @@ export function OrderExperience() {
           </section>
 
           {/* 6 — menu preview */}
-          <section className="ord-card" id="step-6">
-            {stepHead(6, T.s6[l])}
+          <section className="ord-card" id="step-5">
+            {stepHead(5, T.s6[l])}
             <p className="ord-hint">{T.menuHint[l]}</p>
-            {mounted && (
+            {menuStatus === 'loading' && <p className="ord-note">{T.loadingMenu[l]}</p>}
+            {menuStatus === 'error' && <div className="ord-error" role="alert">{T.menuError[l]}</div>}
+            {mounted && menuStatus === 'ready' && (
               <>
                 <div className="ord-menu-days">
                   {menuDates.map((d, i) => (
-                    <button key={dayKey(d)} type="button" className="ord-mday" aria-pressed={i === menuDay} onClick={() => { setMenuDay(i); touch(6); }}>
-                      <small>{fmtDate(d, l, { weekday: 'short' })} · {T.week[l]} {cycleWeek(d)}</small>
+                    <button key={dayKey(d)} type="button" className="ord-mday" aria-pressed={i === menuDay} onClick={() => { setMenuDay(i); touch(4); }}>
+                      <small>{fmtDate(d, l, { weekday: 'short' })}</small>
                       <b>{fmtDate(d, l, { day: 'numeric', month: 'short' })}</b>
                     </button>
                   ))}
@@ -501,18 +517,24 @@ export function OrderExperience() {
                     <AlertTriangle size={15} /> {flaggedTotal} × {T.conflict[l].toLowerCase()} {stopNames.join(', ')}
                   </div>
                 )}
+                {dayMenu.length === 0 && <p className="ord-note">{T.menuEmpty[l]}</p>}
                 <div className="ord-meals">
-                  {dayMenu.map(({ key, dish, swapped }, i) => {
+                  {dayMenu.map(({ key, baseId, dish, swapped }, i) => {
                     const bad = conflicts(dish);
                     return (
                       <article key={key + dish.id} className={`ord-meal ${bad.length ? 'warn' : ''}`} style={{ animationDelay: `${i * 60}ms` }}>
                         <div className="ord-meal-img">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={dish.image} alt={dish.name[l]} loading="lazy" />
-                          <span className="ord-meal-type">{T.mealName[dish.mealType]?.[l] ?? dish.mealType}</span>
                           {dish.rationOnly && <span className="ord-meal-only">{T.rationOnly[l]}</span>}
+                          {videoSrc(dish.slug, false) && (
+                            <button type="button" className="ord-meal-play" onClick={() => setVideoDish(dish)} aria-label={`${T.watch[l]}: ${dish.name[l]}`}>
+                              <Play size={14} /> {T.watch[l]}
+                            </button>
+                          )}
                         </div>
                         <div className="ord-meal-body">
+                          <span className="ord-meal-kind">{T.mealName[dish.mealType]?.[l] ?? dish.mealType}</span>
                           <h4>{dish.name[l]}</h4>
                           <div className="ord-macros">
                             <span>{dish.macros.calories} {T.kcal[l]}</span>
@@ -520,9 +542,9 @@ export function OrderExperience() {
                             <span>{T.fat[l]} {dish.macros.fat}</span>
                             <span>{T.carbs[l]} {dish.macros.carbs}</span>
                           </div>
-                          <div className="ord-ing">{dish.ingredients[l].slice(0, 5).join(' · ')}</div>
+                          <div className="ord-ing">{dish.ingredients[l].slice(0, 5).map(plainIngredient).join(' · ')}</div>
                           {bad.length > 0 && <div className="ord-warn"><AlertTriangle size={14} /> {T.conflict[l]}: {bad.join(', ')}</div>}
-                          <button type="button" className={`ord-swap ${swapped ? 'on' : ''}`} onClick={() => { setSwapFor({ key, dish }); touch(6); }}>
+                          <button type="button" className={`ord-swap ${swapped ? 'on' : ''}`} onClick={() => { setSwapFor({ key, dish, baseId }); touch(4); }}>
                             <Repeat size={15} /> {swapped ? T.swapped[l] : T.swap[l]}
                           </button>
                         </div>
@@ -535,8 +557,8 @@ export function OrderExperience() {
           </section>
 
           {/* 7 — contacts */}
-          <section className="ord-card" id="step-7">
-            {stepHead(7, T.s7[l])}
+          <section className="ord-card" id="step-6">
+            {stepHead(6, T.s7[l])}
             <div className="ord-form-grid">
               <div className="ord-field">
                 <label htmlFor="o-name">{T.name[l]}</label>
@@ -568,9 +590,9 @@ export function OrderExperience() {
               <div className="ord-field full">
                 <label>{T.payment[l]}</label>
                 <div className="ord-pays">
-                  {(['cash', 'card', 'link'] as PayId[]).map(p => (
+                  {(['online', 'card', 'cash'] as PayId[]).map(p => (
                     <button key={p} type="button" className="ord-pay" aria-pressed={pay === p} onClick={() => setPay(p)}>
-                      <span><b>{T[PAY_LABEL[p]][l]}</b>{p === 'link' && <small>{T.payLinkSub[l]}</small>}</span>
+                      <span><b>{T[PAY_LABEL[p]][l]}</b>{p === 'online' && <small>{T.payOnlineSub[l]}</small>}</span>
                       {pay === p && <Check size={18} color="#ccff00" />}
                     </button>
                   ))}
@@ -610,39 +632,35 @@ export function OrderExperience() {
       {/* mobile bottom bar */}
       <div className="ord-bar">
         <div><small>{T.total[l]}</small><b>{total} GEL</b></div>
-        <button type="button" className="ord-cta" onClick={() => (contactOk ? submit() : scrollTo('step-7'))} disabled={sending}>
+        <button type="button" className="ord-cta" onClick={() => (contactOk ? submit() : scrollTo('step-6'))} disabled={sending}>
           {contactOk ? T.submit[l] : T.toOrder[l]} <ArrowRight size={17} />
         </button>
       </div>
 
-      <SignatureFilms locale={l} />
+      <SignatureFilms locale={l} dishes={dishes} onOrder={() => scrollTo('builder')} />
 
-      {/* how it works */}
-      <section className="ord-how" aria-label={T.howTitle[l]}>
-        {[
-          { i: <Sparkles size={18} />, h: T.how1[l], d: T.how1d[l] },
-          { i: <ChefHat size={18} />, h: T.how2[l], d: T.how2d[l] },
-          { i: <Truck size={18} />, h: T.how3[l], d: T.how3d[l] },
-        ].map((x, i) => (
-          <div className="ord-how-i" key={i}>
-            <span className="ord-num">{x.i}</span>
-            <h3>{x.h}</h3>
-            <p>{x.d}</p>
-          </div>
-        ))}
+      {/* contacts */}
+      <section className="ord-contacts" aria-label={T.contactsTitle[l]}>
+        <h2>{T.contactsTitle[l]}</h2>
+        <div className="ord-contacts-row">
+          <a className="ord-ccard" href={CONTACT.phoneHref}><Phone size={20} /><span><small>{T.callUs[l]}</small><b>{CONTACT.phone}</b></span></a>
+          <a className="ord-ccard" href={CONTACT.instagram} target="_blank" rel="noopener noreferrer"><InstagramIcon size={20} /><span><small>Instagram</small><b>{CONTACT.instagramHandle}</b></span></a>
+        </div>
       </section>
+
+      {videoDish && <DishVideoModal dish={videoDish} locale={l} onClose={() => setVideoDish(null)} />}
 
       {swapFor && (
         <SwapSheet
           locale={l}
           current={swapFor.dish}
+          pool={dishes}
           conflicts={conflicts}
           onClose={() => setSwapFor(null)}
           onPick={d => {
             setSwaps(p => {
               const next = { ...p };
-              const original = menuForDate(new Date(swapFor.key.split('|')[0].replace(/-/g, '/'))).find(m => m.mealType === swapFor.key.split('|')[1]);
-              if (original && original.id === d.id) delete next[swapFor.key];
+              if (d.id === swapFor.baseId) delete next[swapFor.key];
               else next[swapFor.key] = d.id;
               return next;
             });

@@ -1079,6 +1079,10 @@ export const PreLaunchLanding: React.FC = () => {
             />
             <span>FITNESS<b>FOOD</b> ACADEMY</span>
           </div>
+          <div className="pl-footer-contacts">
+            <a href="tel:+995596569999" className="pl-footer-link">+995 596 56 99 99</a>
+            <a href="https://www.instagram.com/fitnessfood.ge" target="_blank" rel="noopener noreferrer" className="pl-footer-link">Instagram @fitnessfood.ge</a>
+          </div>
           <p className="pl-footer-copy">{t.footerCopy}</p>
         </div>
       </footer>

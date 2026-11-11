@@ -344,12 +344,12 @@ export default function FAQPage() {
               <span>Telegram</span>
             </a>
             <a
-              href="tel:+995599000000"
+              href="tel:+995596569999"
               className="btn-secondary"
               style={{ padding: '10px 20px', fontSize: '14px', background: '#1E293B', color: '#FFFFFF', borderColor: '#334155' }}
             >
               <IconPhone size={16} />
-              <span>+995 599 00-00-00</span>
+              <span>+995 596 56 99 99</span>
             </a>
           </div>
         </div>
