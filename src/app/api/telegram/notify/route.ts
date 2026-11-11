@@ -6,6 +6,7 @@ import {
   formatShipmentNotification,
   formatWriteOffNotification,
   formatLeadNotification,
+  formatRationOrderNotification,
   getTodayStatsMessage,
   getYesterdayStatsMessage,
   getMonthStatsMessage,
@@ -34,6 +35,8 @@ export async function POST(req: NextRequest) {
       messageText = formatShipmentNotification(data);
     } else if (type === 'writeoff') {
       messageText = formatWriteOffNotification(data);
+    } else if (type === 'ration_order') {
+      messageText = formatRationOrderNotification(data);
     } else if (type === 'lead') {
       messageText = formatLeadNotification(data);
     } else if (type === 'stats' || type === 'today' || type === 'dges') {

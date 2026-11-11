@@ -50,7 +50,7 @@ const MAX_WEEKDAY_SAMPLES = 8;
 const FALLBACK_LOOKBACK_DAYS = 30;
 
 // Local calendar day (not toISOString, which is UTC and misfiles late-night local sales into the wrong day).
-function dayKeyOf(date: Date): string {
+export function dayKeyOf(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 

@@ -281,6 +281,44 @@ ${lead.comment ? `💬 <b>Пожелания / ალერგია:</b> <i>${l
 `.trim();
 }
 
+const escapeHtml = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** A ration (meal-plan) order placed on the /order page. */
+export function formatRationOrderNotification(o: {
+  orderId: string;
+  customerName: string;
+  phone: string;
+  program: string;
+  calories: number;
+  days: number;
+  startDate: string;
+  slot: string;
+  zone: string;
+  address: string;
+  payment: string;
+  total: number;
+  stopList?: string[];
+  swaps?: string[];
+  comment?: string;
+  language?: string;
+}): string {
+  const lines = [
+    `🥗 <b>НОВЫЙ ЗАКАЗ РАЦИОНА! / ახალი შეკვეთა</b>  <code>${escapeHtml(o.orderId)}</code>`,
+    '━━━━━━━━━━━━━━━━━━━━━',
+    `👤 <b>${escapeHtml(o.customerName)}</b>`,
+    `📞 <code>${escapeHtml(o.phone)}</code>`,
+    `🎯 <b>${escapeHtml(o.program)}</b> · ${o.calories} ккал · ${o.days} дн.`,
+    `📅 Старт: <b>${escapeHtml(o.startDate)}</b> · слот: ${escapeHtml(o.slot)}`,
+    `📍 ${escapeHtml(o.zone)} — ${escapeHtml(o.address)}`,
+    `💳 ${escapeHtml(o.payment)} · <b>${o.total} GEL</b>`,
+  ];
+  if (o.stopList && o.stopList.length) lines.push(`⛔ <b>Стоп-лист:</b> ${escapeHtml(o.stopList.join(', '))}`);
+  if (o.swaps && o.swaps.length) lines.push(`🔄 <b>Замены:</b> ${escapeHtml(o.swaps.join('; '))}`);
+  if (o.comment) lines.push(`💬 <i>${escapeHtml(o.comment)}</i>`);
+  lines.push(`🌐 ${(o.language || 'ru').toUpperCase()}`);
+  return lines.join('\n');
+}
+
 export function isYesterdayTbilisi(dateStr: string): boolean {
   const date = new Date(dateStr);
   const now = new Date();

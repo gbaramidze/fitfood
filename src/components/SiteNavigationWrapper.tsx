@@ -17,7 +17,8 @@ export const SiteNavigationWrapper: React.FC<{ children: React.ReactNode }> = ({
   const pathname = usePathname();
 
   // Admin & Partner POS routes are fully active internal workstations
-  const isSpecialWorkstation = pathname?.startsWith('/admin') || pathname?.startsWith('/partner');
+  const isSpecialWorkstation =
+    pathname?.startsWith('/admin') || pathname?.startsWith('/partner') || pathname?.startsWith('/kitchen');
 
   if (isSpecialWorkstation) {
     return <>{children}</>;
