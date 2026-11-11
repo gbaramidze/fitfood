@@ -127,12 +127,12 @@ const getProductIngredients = (prod: PartnerProductItem, currentLang: Locale): s
 
 const UI_TEXT = {
   ka: {
-    navCta: 'დატოვეთ განაცხადი',
+    navCta: 'შეუკვეთე',
     heroTitlePrefix: 'ჯანსაღი კვების სერვისი',
     heroTitleHighlight: 'მალე გაიხსნება',
     heroTitleSuffix: 'ბათუმში',
     heroSubtitle: 'რესტორნის ხარისხის მზა რაციონები ზუსტი კალორიების და მაკრონუტრიენტების გათვლით, სუ-ვიდ ტექნოლოგიით და ყოველდღიური მიწოდებით 08:00-დან 12:00-მდე.',
-    mainCta: 'განაცხადის დატოვება',
+    mainCta: 'შეუკვეთე რაციონი',
     secondaryCta: 'მენიუს დათვალიერება',
     
     // Programs Section
@@ -201,12 +201,12 @@ const UI_TEXT = {
     footerCopy: '© 2026 FITNESS FOOD ACADEMY • Batumi, Georgia',
   },
   ru: {
-    navCta: 'Оставить заявку',
+    navCta: 'Заказать',
     heroTitlePrefix: 'Сервис правильного питания',
     heroTitleHighlight: 'скоро в Батуми',
     heroTitleSuffix: '',
     heroSubtitle: 'Готовые авторские рационы ресторанного качества с точным расчетом КБЖУ, технологией Су-вид и ежедневной доставкой с 8 до 12. Мы скоро запустимся!',
-    mainCta: 'Оставить заявку на запуск',
+    mainCta: 'Заказать рацион',
     secondaryCta: 'Посмотреть блюда и рационы',
 
     // Programs Section
@@ -275,12 +275,12 @@ const UI_TEXT = {
     footerCopy: '© 2026 FITNESS FOOD ACADEMY • Batumi, Georgia',
   },
   en: {
-    navCta: 'Get Early Access',
+    navCta: 'Order now',
     heroTitlePrefix: 'Healthy Meal Prep Service',
     heroTitleHighlight: 'Launching Soon',
     heroTitleSuffix: 'in Batumi',
     heroSubtitle: 'Chef-crafted, macro-precise daily meal prep with sous-vide gastronomy and delivery from 8:00 to 12:00. Opening very soon!',
-    mainCta: 'Get Early Access',
+    mainCta: 'Order your ration',
     secondaryCta: 'Explore Meals & Plans',
 
     // Programs Section
@@ -570,12 +570,9 @@ export const PreLaunchLanding: React.FC = () => {
     }
   }, [isModalOpen]);
 
+  // Ordering is live: every call-to-action opens the order page (the old lead modal is kept below, unused).
   const openModal = (progSlug?: string) => {
-    if (progSlug) {
-      setSelectedProgramSlug(progSlug);
-    }
-    setIsSuccess(false);
-    setIsModalOpen(true);
+    window.location.assign(progSlug ? `/order?program=${encodeURIComponent(progSlug)}` : '/order');
   };
 
   const closeModal = () => {

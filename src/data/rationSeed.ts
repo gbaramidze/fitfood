@@ -1,18 +1,20 @@
-import { Dish, DayOfWeek, MealType } from '@/types';
-import recipes from '@/data/rationRecipes.json';
+import type { DayOfWeek, MealType } from '../types/index';
+import recipes from './rationRecipes.json' with { type: 'json' };
 
 /**
- * RATION-ONLY dishes — the second week of the 2-week ration cycle.
+ * RATION-ONLY dishes for the `partner_products` table (channel "site", NOT "pos").
  *
- * Source of truth for names (KA), KBJU and tech-cards is the kitchen's Excel recipe base:
- *   python scripts/import_ration_recipes.py <workbook.xlsx>   ->   rationRecipes.json
- * This file only adds what the workbook has no columns for: RU/EN copy, photo, schedule slot,
- * allergens. They are flagged `rationOnly` so they never show up as hall / partner products.
+ * KBJU and Georgian names come from the kitchen's Excel recipe base:
+ *   python scripts/import_ration_recipes.py <workbook.xlsx>    ->  rationRecipes.json
+ * This file adds what the workbook has no columns for (RU/EN copy, weekday, meal slot, photo,
+ * allergens) and is pushed to the database with:
+ *   node --experimental-strip-types scripts/seed_ration_dishes.mts
  *
- * Schedule: week 2 puts these on a weekday + meal slot. Slots with no ration-only dish
- * (snacks, Fri–Sun breakfast, Sun dinner) fall back to the classic menu of that weekday — see
- * `menuForDate` in src/lib/rationRotation.ts. A second dish on the same slot is a "reserve":
- * it is offered as a swap and never cooked by default.
+ * Left out on purpose — already in the database from the admin panel: buckwheat with chicken,
+ * pasta julienne, pilaf and chicken shawarma.
+ *
+ * `day` places a dish on a weekday; when a weekday + meal has several dishes they take turns
+ * week by week (see src/lib/rationRotation.ts).
  */
 
 type RecipeKey = keyof typeof recipes;
@@ -23,7 +25,7 @@ interface Spec {
   mealType: MealType;
   image: string;
   weightGrams: number;
-  cookingMethod?: Dish['cookingMethod'];
+  cookingMethod?: string;
   tags: string[];
   allergens: string[];
   rating: number;
@@ -82,7 +84,7 @@ const SPECS: Spec[] = [
   },
   {
     key: 'cottage-pancakes',
-    day: 'wed',
+    day: 'fri',
     mealType: 'breakfast',
     image: img('syrniki-strawberry'),
     weightGrams: 300,
@@ -150,7 +152,7 @@ const SPECS: Spec[] = [
   },
   {
     key: 'fish-veg-crust-buckwheat',
-    day: 'tue',
+    day: 'sat',
     mealType: 'lunch',
     image: img('fish-cutlet-potato'),
     weightGrams: 400,
@@ -193,30 +195,8 @@ const SPECS: Spec[] = [
     },
   },
   {
-    key: 'macaroni-julienne',
-    day: 'thu',
-    mealType: 'lunch',
-    image: img('orzo-shrimp'),
-    weightGrams: 420,
-    cookingMethod: 'baked',
-    tags: ['#Обед', '#Курица', '#Паста'],
-    allergens: ['Глютен', 'Лактоза'],
-    rating: 4.86,
-    name: { ru: 'Макароны жульен с курицей и грибами', en: 'Chicken & Mushroom Julienne Pasta' },
-    desc: {
-      ka: 'მაკარონი ჟულიენით: ქათამი, შამპინიონი და ნაზი კრემი 10% ნაღებზე.',
-      ru: 'Макароны под жульеном: курица, шампиньоны и нежный соус на сливках 10%.',
-      en: 'Pasta in a julienne sauce: chicken, champignons and a delicate 10% cream sauce.',
-    },
-    ingredients: {
-      ka: ['მაკარონი', 'ქათმის მკერდი', 'შამპინიონი', 'ნაღები 10%', 'ხახვი'],
-      ru: ['Макароны', 'Куриная грудка', 'Шампиньоны', 'Сливки 10%', 'Лук'],
-      en: ['Pasta', 'Chicken breast', 'Champignons', 'Cream 10%', 'Onion'],
-    },
-  },
-  {
     key: 'braised-cabbage-turkey',
-    day: 'fri',
+    day: 'sun',
     mealType: 'lunch',
     image: img('bulgur-mushrooms'),
     weightGrams: 420,
@@ -238,7 +218,7 @@ const SPECS: Spec[] = [
   },
   {
     key: 'beef-mushroom-stroganoff',
-    day: 'sat',
+    day: 'fri',
     mealType: 'lunch',
     image: img('beef-demiglace-puree'),
     weightGrams: 380,
@@ -258,75 +238,7 @@ const SPECS: Spec[] = [
       en: ['Beef', 'Champignons', 'Sour cream 10%', 'Mustard', 'Onion', 'Potato', 'Broccoli'],
     },
   },
-  {
-    key: 'plov-chicken',
-    day: 'sun',
-    mealType: 'lunch',
-    image: img('risotto-vegetables'),
-    weightGrams: 380,
-    cookingMethod: 'baked',
-    tags: ['#Обед', '#Курица', '#Классика'],
-    allergens: [],
-    rating: 4.9,
-    name: { ru: 'Плов с курицей', en: 'Chicken Plov' },
-    desc: {
-      ka: 'არომატული ფლავი ბასმათის ბრინჯით, ქათმითა და სტაფილოთი.',
-      ru: 'Ароматный плов с рассыпчатым басмати, курицей и морковью — воскресная классика.',
-      en: 'Fragrant plov with fluffy basmati rice, chicken and carrot — a Sunday classic.',
-    },
-    ingredients: {
-      ka: ['ქათმის მკერდი', 'ბასმათის ბრინჯი', 'სტაფილო', 'ხახვი', 'ნიორი'],
-      ru: ['Куриная грудка', 'Рис басмати', 'Морковь', 'Лук', 'Чеснок'],
-      en: ['Chicken breast', 'Basmati rice', 'Carrot', 'Onion', 'Garlic'],
-    },
-  },
-  {
-    // Reserve: shares the Sunday lunch slot with the plov — offered as a swap, not cooked by default.
-    key: 'buckwheat-chicken-merchant',
-    day: 'sun',
-    mealType: 'lunch',
-    image: img('chicken-cheese-buckwheat'),
-    weightGrams: 360,
-    cookingMethod: 'baked',
-    tags: ['#Обед', '#Курица', '#Гречка'],
-    allergens: [],
-    rating: 4.89,
-    name: { ru: 'Гречка по-купечески с курицей', en: 'Merchant-Style Buckwheat with Chicken' },
-    desc: {
-      ka: 'წიწიბურა ქათმით ვაჭრული სტილით: ბოსტნეული, პომიდორი და ნაზი ქათმის მკერდი.',
-      ru: 'Гречка по-купечески: нежная курица, овощи и томаты — классика фитнес-кухни.',
-      en: 'Merchant-style buckwheat: tender chicken, vegetables and tomato — a fitness-kitchen classic.',
-    },
-    ingredients: {
-      ka: ['ქათმის მკერდი', 'წიწიბურა', 'ხახვი', 'სტაფილო', 'ბულგარული წიწაკა', 'პომიდორი', 'პომიდვრის პასტა'],
-      ru: ['Куриная грудка', 'Гречка', 'Лук', 'Морковь', 'Болгарский перец', 'Томаты', 'Томатная паста'],
-      en: ['Chicken breast', 'Buckwheat', 'Onion', 'Carrot', 'Bell pepper', 'Tomato', 'Tomato paste'],
-    },
-  },
-
   // ───────────────────────── DINNER ─────────────────────────
-  {
-    key: 'shawarma-burrito',
-    day: 'mon',
-    mealType: 'dinner',
-    image: img('meatloaf-bbq'),
-    weightGrams: 300,
-    cookingMethod: 'grilled',
-    tags: ['#Ужин', '#Курица', '#Хит'],
-    allergens: ['Глютен'],
-    rating: 4.94,
-    name: { ru: 'Шаурма-буррито с курицей', en: 'Chicken Shawarma Burrito' },
-    desc: {
-      ka: 'ფიტ-შაურმა ქათმით ლავაშში: ხრაშუნა ბოსტნეული და მსუბუქი სოუსი.',
-      ru: 'Фитнес-шаурма в лаваше с курицей, хрустящими овощами и лёгким соусом.',
-      en: 'Fit shawarma wrapped in flatbread with chicken, crunchy vegetables and a light sauce.',
-    },
-    ingredients: {
-      ka: ['ლავაში', 'ქათმის ფილე', 'სალათის ფოთოლი', 'პომიდორი', 'ბულგარული წიწაკა', 'კიტრი', 'ხახვი'],
-      ru: ['Лаваш', 'Куриное филе', 'Салатные листья', 'Томаты', 'Болгарский перец', 'Огурец', 'Лук'],
-      en: ['Flatbread', 'Chicken fillet', 'Lettuce', 'Tomato', 'Bell pepper', 'Cucumber', 'Onion'],
-    },
-  },
   {
     key: 'turkey-hedgehogs',
     day: 'tue',
@@ -373,7 +285,7 @@ const SPECS: Spec[] = [
   },
   {
     key: 'bowl-chicken-thigh',
-    day: 'thu',
+    day: 'mon',
     mealType: 'dinner',
     image: img('chicken-ptitim'),
     weightGrams: 400,
@@ -395,7 +307,7 @@ const SPECS: Spec[] = [
   },
   {
     key: 'chicken-broccoli-buckwheat',
-    day: 'fri',
+    day: 'thu',
     mealType: 'dinner',
     image: img('chicken-cheese-buckwheat'),
     weightGrams: 420,
@@ -438,36 +350,55 @@ const SPECS: Spec[] = [
     },
   },
 ];
+const ALLERGEN_KA: Record<string, string> = {
+  'Яйца': 'კვერცხი',
+  'Лактоза': 'რძე',
+  'Глютен': 'გლუტენი',
+  'Рыба': 'თევზი',
+  'Соя': 'სოია',
+};
 
-const entry = (key: RecipeKey) => recipes[key];
+const CATEGORY: Record<string, string> = {
+  'omelet-tomato': 'breakfast',
+  'chicken-cutlets-puree': 'poultry',
+  'cottage-pancakes': 'breakfast',
+  'lazy-curd-balls': 'breakfast',
+  'lazy-tolma-turkey': 'poultry',
+  'fish-veg-crust-buckwheat': 'fish',
+  'potato-souffle-chicken-cheese': 'poultry',
+  'braised-cabbage-turkey': 'poultry',
+  'beef-mushroom-stroganoff': 'meat',
+  'turkey-hedgehogs': 'poultry',
+  'lentil-soup-puree': 'poultry',
+  'bowl-chicken-thigh': 'poultry',
+  'chicken-broccoli-buckwheat': 'poultry',
+  'bowl-trout': 'fish',
+};
 
-export const rationDishes: Dish[] = SPECS.map(s => {
-  const r = entry(s.key);
+/** Rows ready to upsert into `partner_products`. */
+export const rationSeedRows = SPECS.map(s => {
+  const r = recipes[s.key];
   return {
-    id: `dish-r2-${s.key}`,
+    id: `dish-xl-${s.key}`,
     slug: s.key,
     name: { ka: r.nameKa, ru: s.name.ru, en: s.name.en },
     description: s.desc,
-    mealType: s.mealType,
+    category: CATEGORY[s.key] ?? 'poultry',
+    category_name: { ka: CATEGORY[s.key] ?? 'poultry', ru: CATEGORY[s.key] ?? 'poultry', en: CATEGORY[s.key] ?? 'poultry' },
+    meal_type: s.mealType,
     day: s.day,
-    macros: {
-      calories: r.calories,
-      protein: r.protein,
-      fat: r.fat,
-      carbs: r.carbs,
-      weightGrams: s.weightGrams,
-    },
+    price: 0, // ration-only: never sold on its own
+    cost_price: 0,
+    calories: r.calories,
+    protein: r.protein,
+    fat: r.fat,
+    carbs: r.carbs,
+    weight_grams: s.weightGrams,
     image: s.image,
-    boxImage: s.image,
-    tags: s.tags,
-    allergens: s.allergens,
-    isGeorgianFit: false,
-    cookingMethod: s.cookingMethod,
     ingredients: s.ingredients,
-    reviews: [],
-    rating: s.rating,
-    week: 2,
-    rationOnly: true,
-    recipe: { ingredientLines: r.ingredientLines, methodLines: r.methodLines },
-  } satisfies Dish;
+    allergens: s.allergens.map(a => ALLERGEN_KA[a] ?? a),
+    cooking_method: 'classic',
+    target_channels: ['site'],
+    badge: null,
+  };
 });

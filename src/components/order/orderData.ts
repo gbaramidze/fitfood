@@ -146,6 +146,7 @@ export const T = {
 
   summary: s('შენი შეკვეთა', 'Ваш заказ', 'Your order'),
   sProgram: s('პროგრამა', 'Программа', 'Program'),
+  sPrice: s('რაციონი', 'Рацион', 'Ration'),
   sPeriod: s('პერიოდი', 'Период', 'Period'),
   sDelivery: s('მიტანა', 'Доставка', 'Delivery'),
   sStop: s('გამორიცხულია', 'Исключено', 'Excluded'),
