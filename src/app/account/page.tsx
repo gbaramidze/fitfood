@@ -7,8 +7,10 @@ import { useLanguage } from '@/context/LanguageContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { normalizePhone } from '@/lib/phone';
 import { useRationDishes } from '@/lib/rationDishesService';
-import { menuForDate } from '@/lib/rationRotation';
+import { buildMenu } from '@/lib/rationRotation';
+import { mealsFor } from '@/lib/rationOptions';
 import { Locale } from '@/types';
+import { DishImage } from '@/components/order/DishImage';
 import { CONTACT, addDays, dayKey, fmtDate } from '@/components/order/orderData';
 import '@/components/order/order.css';
 
@@ -28,6 +30,8 @@ const A = {
   badCode: s('არასწორი კოდი', 'Неверный код', 'Wrong code'),
   sendFail: s('SMS ვერ გაიგზავნა. სცადე მოგვიანებით ან დაგვირეკე.', 'Не удалось отправить SMS. Попробуйте позже или позвоните нам.', 'Could not send the SMS. Try again later or call us.'),
   logout: s('გასვლა', 'Выйти', 'Sign out'),
+  demoBanner: s('დემო რეჟიმი: ტესტური მონაცემები, რეალური შეკვეთები არ არის.', 'Демо-режим: тестовые данные, это не настоящие заказы.', 'Demo mode: sample data, not real orders.'),
+  demoPay: s('დემოში გადახდა არ სრულდება.', 'В демо-режиме оплата не выполняется.', 'Payments are not made in demo mode.'),
   orders: s('ჩემი შეკვეთები', 'Мои заказы', 'My orders'),
   none: s('შეკვეთები ჯერ არ არის.', 'Заказов пока нет.', 'No orders yet.'),
   newOrder: s('შეკვეთა', 'Сделать заказ', 'Place an order'),
@@ -42,8 +46,14 @@ const A = {
   noDb: s('სერვისი დროებით მიუწვდომელია.', 'Сервис временно недоступен.', 'Service temporarily unavailable.'),
   loading: s('იტვირთება…', 'Загрузка…', 'Loading…'),
   back: s('შეკვეთაზე', 'К заказу', 'To ordering'),
+  method: {
+    online: s('ონლაინ ბარათით', 'Онлайн картой', 'Online by card'),
+    transfer: s('გადარიცხვა ანგარიშზე', 'Перевод на счёт', 'Bank transfer'),
+    gym: s('ნაღდი ფული დარბაზში', 'Наличными в зале', 'Cash at the gym'),
+  } as Record<string, Str>,
+  payCode: s('გადახდის კოდი', 'Код оплаты', 'Payment code'),
   payStatus: {
-    unpaid: s('გადასახდელი კურიერთან', 'Оплата курьеру', 'Pay on delivery'),
+    unpaid: s('გადასახდელია', 'Ожидает оплаты', 'Awaiting payment'),
     pending: s('გადახდის მოლოდინში', 'Ожидает оплаты', 'Awaiting payment'),
     paid: s('გადახდილია', 'Оплачен', 'Paid'),
     failed: s('გადახდა ვერ შესრულდა', 'Оплата не прошла', 'Payment failed'),
@@ -67,6 +77,7 @@ const A = {
 
 interface OrderRow {
   id: string;
+  program_id: string;
   program_title: string;
   calories: number;
   days: number;
@@ -74,10 +85,32 @@ interface OrderRow {
   delivery_slot: string;
   total: number;
   payment_method: string;
+  payment_code: string | null;
   payment_status: string;
   status: string;
   address: string;
   created_at: string;
+}
+
+/** Preview login: this number + code opens a demo account with sample orders. No SMS, no real session, no real data. */
+const DEMO_PHONE = '995579205205';
+const DEMO_CODE = '1222';
+
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function demoOrders(): OrderRow[] {
+  const day = (n: number) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n); return d; };
+  return [
+    {
+      id: 'FF-DEMO-2', program_id: 'prog-slim', program_title: 'Снижение веса', calories: 1800, days: 14, start_date: iso(day(1)),
+      delivery_slot: '20:00 – 21:00', total: 927, payment_method: 'online', payment_code: null, payment_status: 'unpaid', status: 'confirmed',
+      address: 'Батуми, ул. Руставели', created_at: new Date().toISOString(),
+    },
+    {
+      id: 'FF-DEMO-1', program_id: 'prog-balance', program_title: 'Баланс', calories: 1500, days: 7, start_date: iso(day(-12)),
+      delivery_slot: '21:00 – 22:00', total: 426, payment_method: 'gym', payment_code: 'K7M2QX', payment_status: 'paid', status: 'completed',
+      address: 'Батуми, ул. Руставели', created_at: new Date(Date.now() - 14 * 864e5).toISOString(),
+    },
+  ];
 }
 
 export default function AccountPage() {
@@ -94,6 +127,7 @@ export default function AccountPage() {
   const [msg, setMsg] = useState('');
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [banner, setBanner] = useState<'paid' | 'fail' | ''>('');
+  const [demo, setDemo] = useState(false);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
@@ -128,6 +162,7 @@ export default function AccountPage() {
   const sendCode = async () => {
     setMsg('');
     if (!digits) { setMsg(A.badPhone[l]); return; }
+    if (digits === DEMO_PHONE) { setStep('code'); return; } // demo number: nothing is sent
     setBusy(true);
     const { error } = await supabase.auth.signInWithOtp({ phone: `+${digits}` });
     setBusy(false);
@@ -137,6 +172,10 @@ export default function AccountPage() {
 
   const verify = async () => {
     setMsg('');
+    if (digits === DEMO_PHONE) {
+      if (code.trim() === DEMO_CODE) { setDemo(true); setOrders(demoOrders()); } else setMsg(A.badCode[l]);
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.verifyOtp({ phone: `+${digits}`, token: code.trim(), type: 'sms' });
     setBusy(false);
@@ -144,6 +183,7 @@ export default function AccountPage() {
   };
 
   const logout = async () => {
+    if (demo) { setDemo(false); setOrders(null); setStep('phone'); setCode(''); return; }
     await supabase.auth.signOut();
     setStep('phone');
     setCode('');
@@ -151,6 +191,7 @@ export default function AccountPage() {
 
   const pay = async (orderId: string) => {
     setMsg('');
+    if (demo) { setMsg(A.demoPay[l]); return; }
     setBusy(true);
     try {
       const r = await fetch('/api/payments/create', {
@@ -175,8 +216,9 @@ export default function AccountPage() {
     const end = addDays(start, o.days - 1);
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const from = start > today ? start : today;
-    const out: { date: Date; meals: ReturnType<typeof menuForDate> }[] = [];
-    for (let d = new Date(from); d <= end && out.length < 5; d = addDays(d, 1)) out.push({ date: new Date(d), meals: menuForDate(d, dishes) });
+    const n = mealsFor(o.program_id, o.calories);
+    const out: { date: Date; meals: ReturnType<typeof buildMenu> }[] = [];
+    for (let d = new Date(from); d <= end && out.length < 5; d = addDays(d, 1)) out.push({ date: new Date(d), meals: buildMenu(d, n, dishes, o.calories) });
     return out;
   }, [orders, dishes]);
 
@@ -209,7 +251,7 @@ export default function AccountPage() {
 
         {!ready ? (
           <p className="ord-note">{A.loading[l]}</p>
-        ) : !token ? (
+        ) : !token && !demo ? (
           <section className="ord-card acc-login">
             {step === 'phone' ? (
               <>
@@ -234,9 +276,10 @@ export default function AccountPage() {
         ) : (
           <>
             <div className="acc-bar">
-              <span>+{userPhone}</span>
+              <span>+{demo ? DEMO_PHONE : userPhone}</span>
               <button type="button" className="ord-btn-ghost" onClick={logout}><LogOut size={15} style={{ marginRight: 6, verticalAlign: -2 }} />{A.logout[l]}</button>
             </div>
+            {demo && <div className="acc-banner ok">{A.demoBanner[l]}</div>}
             {msg && <div className="ord-error" role="alert">{msg}</div>}
 
             <h2 className="acc-h2">{A.orders[l]}</h2>
@@ -262,6 +305,7 @@ export default function AccountPage() {
                       <div className="ord-row"><span>{o.program_title}</span><b>{o.calories} · {o.days}</b></div>
                       <div className="ord-row"><span>{A.period[l]}</span><b>{fmtDate(start, l, { day: 'numeric', month: 'short' })} – {fmtDate(addDays(start, o.days - 1), l, { day: 'numeric', month: 'short' })}</b></div>
                       <div className="ord-row"><span>{A.delivery[l]}</span><b>{o.delivery_slot}</b></div>
+                      <div className="ord-row"><span>{A.method[o.payment_method]?.[l] ?? o.payment_method}</span><b>{o.payment_code && o.payment_status !== 'paid' ? `${A.payCode[l]}: ${o.payment_code.slice(0, 3)}-${o.payment_code.slice(3)}` : ''}</b></div>
                       <div className="ord-row"><span>{A.total[l]}</span><b style={{ color: 'var(--o-lime)' }}>{o.total} GEL</b></div>
                       {needsPay && (
                         <button type="button" className="ord-submit" style={{ marginTop: 14 }} onClick={() => pay(o.id)} disabled={busy}>
@@ -281,10 +325,9 @@ export default function AccountPage() {
                   {upcoming.map(({ date, meals }) => (
                     <section key={dayKey(date)} className="ord-card acc-day">
                       <h3>{fmtDate(date, l, { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
-                      {meals.length === 0 ? <p className="ord-note">—</p> : meals.map(m => (
-                        <div key={m.id} className="acc-meal">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={m.image} alt="" loading="lazy" />
+                      {meals.length === 0 ? <p className="ord-note">—</p> : meals.map(({ slot, dish: m }) => (
+                        <div key={`${slot}-${m.id}`} className="acc-meal">
+                          <DishImage src={m.image} alt={m.name[l]} />
                           <div>
                             <small>{A.meal[m.mealType]?.[l] ?? m.mealType}</small>
                             <b>{m.name[l]}</b>

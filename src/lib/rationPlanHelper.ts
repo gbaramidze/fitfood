@@ -1,7 +1,8 @@
 import { Dish, DayOfWeek, MealType } from '@/types';
 import { KitchenClient, KitchenDeliverySlot } from '@/types/kitchen';
 import { dayKeyOf } from '@/lib/salesForecastHelper';
-import { menuForDate } from '@/lib/rationRotation';
+import { buildMenu, MEAL_ORDER } from '@/lib/rationRotation';
+import { mealsFor } from '@/lib/rationOptions';
 
 const WEEKDAY_KEYS: DayOfWeek[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
@@ -100,24 +101,31 @@ export function computeRationPlan(
       a.clientName.localeCompare(b.clientName)
   );
 
-  // Every client receives the whole menu of the day; portion size follows their calorie tier.
-  // (2-week cycle: the dishes of a weekday depend on which week of the cycle the date falls in.)
-  const dishes: RationDishPlan[] = menuForDate(targetDate, siteDishes)
-    .map(d => {
-      const tiers = new Map<number, number>();
-      active.forEach(c => tiers.set(c.calories, (tiers.get(c.calories) || 0) + 1));
-      return {
-        dishId: d.id,
-        name: d.name.ka,
-        mealType: d.mealType,
-        image: d.image,
-        total: active.length,
-        byCalories: Array.from(tiers.entries())
-          .map(([calories, qty]) => ({ calories, qty }))
-          .sort((a, b) => a.calories - b.calories),
-        clientsWithNotes: active.filter(c => (c.notes || '').trim().length > 0).length,
-      };
+  // Each client gets the menu for THEIR ration (3-6 meals a day depending on program + calories);
+  // a dish that a client eats twice in a day counts twice. Portion size follows the calorie tier.
+  const perDish = new Map<string, { dish: Dish; total: number; tiers: Map<number, number>; clients: Set<string> }>();
+  active.forEach(c => {
+    buildMenu(targetDate, mealsFor(c.programId, c.calories), siteDishes, c.calories).forEach(({ dish }) => {
+      const cur = perDish.get(dish.id) || { dish, total: 0, tiers: new Map<number, number>(), clients: new Set<string>() };
+      cur.total += 1;
+      cur.tiers.set(c.calories, (cur.tiers.get(c.calories) || 0) + 1);
+      cur.clients.add(c.id);
+      perDish.set(dish.id, cur);
     });
+  });
+  const dishes: RationDishPlan[] = Array.from(perDish.values())
+    .sort((a, b) => MEAL_ORDER.indexOf(a.dish.mealType) - MEAL_ORDER.indexOf(b.dish.mealType))
+    .map(({ dish, total, tiers, clients: ids }) => ({
+      dishId: dish.id,
+      name: dish.name.ka,
+      mealType: dish.mealType,
+      image: dish.image,
+      total,
+      byCalories: Array.from(tiers.entries())
+        .map(([calories, qty]) => ({ calories, qty }))
+        .sort((x, y) => x.calories - y.calories),
+      clientsWithNotes: active.filter(c => ids.has(c.id) && (c.notes || '').trim().length > 0).length,
+    }));
 
   const programs = new Map<string, { programTitle: string; calories: number; qty: number }>();
   active.forEach(c => {

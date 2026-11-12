@@ -1,5 +1,15 @@
 import { BatumiZone } from '@/types';
 
+/**
+ * The delivery zone of a map point (approximate, by position along the coast).
+ * `null` = outside the area we deliver to.
+ */
+export function zoneForPoint(lat: number, lng: number): BatumiZone | null {
+  if (!(lat >= 41.48 && lat <= 41.75 && lng >= 41.48 && lng <= 41.8)) return null;
+  const id = lat < 41.605 ? 'zone-gonio' : lat > 41.672 ? 'zone-makhinjauri' : lat > 41.652 ? 'zone-boulevard-new' : 'zone-center';
+  return batumiZones.find(z => z.id === id) ?? null;
+}
+
 export const batumiZones: BatumiZone[] = [
   {
     id: 'zone-center',

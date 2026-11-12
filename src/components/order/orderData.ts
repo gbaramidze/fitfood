@@ -1,38 +1,66 @@
 import { Locale, Program } from '@/types';
 
-export const CALORIE_OPTIONS: Record<string, { cal: number; meals: number }[]> = {
-  'prog-slim': [
-    { cal: 750, meals: 3 },
-    { cal: 1000, meals: 4 },
-    { cal: 1250, meals: 4 },
-    { cal: 1500, meals: 5 },
-  ],
-  'prog-balance': [
-    { cal: 1600, meals: 5 },
-    { cal: 1800, meals: 5 },
-    { cal: 2000, meals: 5 },
-  ],
-  'prog-power': [
-    { cal: 2200, meals: 6 },
-    { cal: 2500, meals: 6 },
-    { cal: 3000, meals: 6 },
-  ],
-  'prog-detox': [
-    { cal: 900, meals: 6 },
-    { cal: 1100, meals: 6 },
-  ],
+export { CALORIE_LEVELS, enabledOptions } from '@/lib/rationOptions';
+
+/** Ration lengths offered on the site. */
+export const DURATIONS: { days: number }[] = [{ days: 2 }, { days: 7 }, { days: 14 }, { days: 30 }];
+
+/**
+ * PRICING — a fixed price per dish, a little under what the same dish costs in the hall (about 20 GEL a container).
+ *
+ *   PRICE_MAIN      one main dish (breakfast, lunch, dinner) in a 2-day ration, GEL
+ *   PRICE_SNACK     one snack / salad / dessert in a 2-day ration, GEL
+ *   DISCOUNT        discount for longer rations
+ *
+ * The cost side, for the "never at a loss" check (GEL):
+ *   COST_MAIN_LOADED    food + container + kitchen salaries ≈ 13  (food and container alone ≈ 6)
+ *   COST_SNACK_LOADED   an average snack, salaries included
+ * Even the 30-day price stays above the loaded cost; see `marginAt` below.
+ */
+export const PRICE_MAIN = 16;
+export const PRICE_SNACK = 8;
+export const DISCOUNT: Record<number, number> = { 2: 0, 7: 0.05, 14: 0.08, 30: 0.12 };
+export const COST_MAIN_LOADED = 13;
+export const COST_SNACK_LOADED = 5.5;
+
+/** Mains are always breakfast + lunch + dinner; every meal above 3 is a snack, salad or dessert. */
+const split = (meals: number) => ({ mains: 3, snacks: Math.max(0, meals - 3) });
+
+/**
+ * More calories = bigger, pricier dishes, so the price follows the calories a little within the same number of meals.
+ * REF_KCAL is the level where the base price above applies; ELASTICITY says how much of the calorie difference is
+ * charged (0.35: 10% more calories -> 3.5% higher price).
+ */
+const REF_KCAL: Record<number, number> = { 3: 1000, 4: 1250, 5: 1800, 6: 2500 };
+const ELASTICITY = 0.35;
+/** A ration is never sold below its loaded cost + this margin, whatever the discount. */
+const MIN_MARGIN = 0.05;
+
+/** What a day of this ration costs us, salaries included. */
+export function dayCost(meals: number) {
+  const { mains, snacks } = split(meals);
+  return mains * COST_MAIN_LOADED + snacks * COST_SNACK_LOADED;
+}
+
+/** Price per day in GEL for a ration of `days` days (discount included). */
+const perDay = (meals: number, kcal: number, days: number) => {
+  const { mains, snacks } = split(meals);
+  const disc = DISCOUNT[days] ?? 0;
+  const ref = REF_KCAL[Math.min(6, Math.max(3, meals))];
+  const factor = kcal > 0 ? 1 + ELASTICITY * (kcal / ref - 1) : 1;
+  const floor = (dayCost(meals) * (1 + MIN_MARGIN)) / (1 - disc);
+  return Math.max((mains * PRICE_MAIN + snacks * PRICE_SNACK) * factor, floor) * (1 - disc);
 };
 
-export const DURATIONS: { days: number; key: keyof Program['prices'] }[] = [
-  { days: 2, key: 'trialTwoDays' },
-  { days: 6, key: 'sixDays' },
-  { days: 12, key: 'twelveDays' },
-  { days: 24, key: 'twentyFourDays' },
-  { days: 30, key: 'thirtyDays' },
-];
+/** Price in GEL of `days` days of a ration with `meals` meals and `kcal` calories a day. */
+export const rationPrice = (meals: number, kcal: number, days: number) => Math.round(perDay(meals, kcal, days) * days);
+
+/** Profit over the loaded cost for a ration of `days` days, as a share of the cost (0.1 = +10%). */
+export const marginAt = (meals: number, kcal: number, days: number) => perDay(meals, kcal, days) / dayCost(meals) - 1;
 
 // For now we deliver only in the evening, 20:00–23:00, in one-hour windows.
 export type SlotId = 'e20' | 'e21' | 'e22';
+
 export const SLOTS: { id: SlotId; time: string }[] = [
   { id: 'e20', time: '20:00 – 21:00' },
   { id: 'e21', time: '21:00 – 22:00' },
@@ -46,21 +74,30 @@ export const CONTACT = {
   instagramHandle: '@fitnessfood.ge',
 };
 
-/**
- * The published program price is for the middle of the program's calorie range.
- * Smaller / bigger daily portions cost proportionally less / more: ~55% of the price is fixed
- * (packaging, delivery, kitchen time) and ~45% follows the calories.
- * Tweak the two numbers below to change how steeply price follows calories.
- */
-const MID_KCAL: Record<string, number> = { 'prog-slim': 1125, 'prog-balance': 1800, 'prog-power': 2600, 'prog-detox': 1000 };
-const FIXED_SHARE = 0.55;
-export const tierPrice = (base: number, programId: string, kcal: number) =>
-  Math.round(base * (FIXED_SHARE + (1 - FIXED_SHARE) * (kcal / (MID_KCAL[programId] || kcal))));
+// Payment methods (first stage): online card, bank transfer, cash at a partner fitness gym. Nothing else.
+export type PayId = 'online' | 'transfer' | 'gym';
 
-export type PayId = 'cash' | 'card' | 'online';
+/** Gyms where a customer can pay cash. `id` is the partner point id in the database (partner_points). */
+export const GYMS: { id: string; name: string; address: Record<Locale, string> }[] = [
+  { id: 'point-mega-gym', name: 'Mega Gym', address: { ka: 'კაჩინსკების 5ბ', ru: 'ул. Качинских 5Б', en: '5B Kachinski St' } },
+  { id: 'point-fitness-academy', name: 'Fitness Academy', address: { ka: 'ფიროსმანის 18', ru: 'ул. Пиросмани 18', en: '18 Pirosmani St' } },
+];
+
+/** Bank details for "bank transfer". Fill these in and they are shown to the customer right after the order. */
+export const TRANSFER = { bank: '', iban: '', recipient: '' };
 
 export const dayKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** Delivery is planned two days ahead: an order made today (even at 23:00) starts the day after tomorrow. */
+export const LEAD_DAYS = 2;
+
+/** Today's calendar date in Batumi (Georgia, UTC+4), as a local Date at midnight — the same on the phone and on the server. */
+export const batumiToday = (now: Date = new Date()): Date => {
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tbilisi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const [y, m, d] = p.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
 
 export const addDays = (d: Date, n: number) => {
   const x = new Date(d);
@@ -149,9 +186,9 @@ export const T = {
   popular: s('პოპულარული', 'Хит', 'Popular'),
   startDate: s('დაწყების თარიღი', 'Дата старта', 'Start date'),
   startHint: s(
-    'მიტანა ხდება მხოლოდ საღამოს 20:00–23:00. ხვალინდელ შეკვეთას ვიღებთ დღეს 18:00-მდე.',
-    'Пока доставляем только вечером, с 20:00 до 23:00. Заказ на завтра принимаем до 18:00 сегодня.',
-    'For now we deliver in the evening only, 20:00–23:00. Orders for tomorrow are accepted until 18:00 today.'
+    'მიტანა ხდება მხოლოდ საღამოს 20:00–23:00. უახლოესი მიტანა — ზეგ, შეკვეთის დღიდან 2 დღეში.',
+    'Пока доставляем только вечером, с 20:00 до 23:00. Ближайшая доставка — послезавтра: готовим заранее, поэтому заказ сегодня стартует через 2 дня.',
+    'For now we deliver in the evening only, 20:00–23:00. The earliest delivery is the day after tomorrow — we cook ahead, so an order today starts in 2 days.'
   ),
   slot: s('მიტანის დრო', 'Время доставки', 'Delivery time'),
   stopHint: s(
@@ -195,6 +232,25 @@ export const T = {
   payment: s('გადახდა', 'Оплата', 'Payment'),
   payCash: s('ნაღდი კურიერთან', 'Наличными курьеру', 'Cash to courier'),
   payCard: s('ბარათი კურიერთან', 'Картой курьеру', 'Card to courier'),
+  payTransfer: s('გადარიცხვა ანგარიშზე', 'Перевод на счёт', 'Bank transfer'),
+  payTransferSub: s('რეკვიზიტებს მიიღებთ შეკვეთის შემდეგ', 'Реквизиты — сразу после заказа', 'Bank details right after you order'),
+  payGym: s('ნაღდი ფული სპორტდარბაზში', 'Наличными в фитнес-зале', 'Cash at a fitness gym'),
+  payGymSub: s('მიიღებთ კოდს — დარბაზში შეიტანეთ თანხა ამ კოდით', 'Получите код — внесите сумму в зале по этому коду', 'You get a code — pay the amount at the gym with it'),
+  gymChoose: s('აირჩიე დარბაზი', 'Выберите зал', 'Choose a gym'),
+  payCode: s('გადახდის კოდი', 'Код оплаты', 'Payment code'),
+  codeHelp: s(
+    'დარბაზში უთხარით ეს კოდი ადმინისტრატორს და შეიტანეთ {amount} GEL.',
+    'Назовите этот код администратору зала и внесите {amount} GEL.',
+    'Tell this code to the gym front desk and pay {amount} GEL.'
+  ),
+  transferHelp: s(
+    'გადარიცხვისას მიუთითეთ შეკვეთის ნომერი:',
+    'В назначении перевода укажите номер заказа:',
+    'Put the order number in the transfer reference:'
+  ),
+  transferLater: s('რეკვიზიტებს გამოგიგზავნით ტელეფონზე.', 'Реквизиты пришлём на ваш телефон.', 'We will send the bank details to your phone.'),
+  bank: s('ბანკი', 'Банк', 'Bank'),
+  recipient: s('მიმღები', 'Получатель', 'Recipient'),
   payOnline: s('ონლაინ ბარათით', 'Онлайн картой', 'Pay online by card'),
   payOnlineSub: s('უსაფრთხო გადახდა ბანკის გვერდზე — Visa / Mastercard', 'Безопасная оплата на странице банка — Visa / Mastercard', 'Secure payment on the bank page — Visa / Mastercard'),
   doneLink: s('მენეჯერი გამოგიგზავნით გადახდის ბმულს ტელეფონზე.', 'Менеджер пришлёт ссылку на оплату на ваш телефон.', 'A manager will send the payment link to your phone.'),
@@ -225,6 +281,129 @@ export const T = {
   loadingMenu: s('მენიუ იტვირთება…', 'Загружаем меню…', 'Loading the menu…'),
   menuError: s('მენიუ ვერ ჩაიტვირთა. სცადე გვერდის განახლება.', 'Не удалось загрузить меню. Обновите страницу.', 'Could not load the menu. Please refresh.'),
   menuEmpty: s('ამ დღისთვის მენიუ ჯერ არ არის შევსებული.', 'На этот день меню ещё не заполнено.', 'The menu for this day is not filled in yet.'),
+  stepRation: s('რაციონი', 'Рацион', 'Ration'),
+  next: s('შემდეგი', 'Далее', 'Next'),
+  prev: s('უკან', 'Назад', 'Back'),
+  dayTotal: s('დღის ჯამი', 'Итого за день', 'Day total'),
+  calcTitle: s('გამოთვალეთ თქვენი რაციონი', 'Рассчитайте свой рацион', 'Work out your ration'),
+  calcSex: s('სქესი', 'Пол', 'Sex'),
+  male: s('კაცი', 'Мужчина', 'Man'),
+  female: s('ქალი', 'Женщина', 'Woman'),
+  calcAge: s('ასაკი', 'Возраст', 'Age'),
+  calcHeight: s('სიმაღლე, სმ', 'Рост, см', 'Height, cm'),
+  calcWeight: s('წონა, კგ', 'Вес, кг', 'Weight, kg'),
+  calcActivity: s('აქტივობა', 'Активность', 'Activity'),
+  actSedentary: s('ჯდომითი, ვარჯიშის გარეშე', 'Сидячая, без тренировок', 'Desk job, no workouts'),
+  actLight: s('მსუბუქი, 1–3 ვარჯიში კვირაში', 'Лёгкая, 1–3 тренировки в неделю', 'Light, 1–3 workouts a week'),
+  actModerate: s('საშუალო, 3–5 ვარჯიში', 'Средняя, 3–5 тренировок', 'Moderate, 3–5 workouts'),
+  actHigh: s('მაღალი, 6–7 ვარჯიში ან ფიზიკური შრომა', 'Высокая, 6–7 тренировок или физический труд', 'High, 6–7 workouts or a physical job'),
+  calcGoal: s('მიზანი', 'Цель', 'Goal'),
+  goalLose: s('წონის კლება', 'Похудение', 'Lose weight'),
+  goalMaintain: s('ფორმის შენარჩუნება', 'Поддержание веса', 'Maintain weight'),
+  goalGain: s('მასის მატება', 'Набор массы', 'Gain muscle'),
+  calcResult: s(
+    'თქვენი დღიური ნორმა {need} კკალ. მიზნისთვის საჭიროა დაახლოებით {target} კკალ.',
+    'Ваша норма — {need} ккал в день. Для вашей цели нужно около {target} ккал.',
+    'Your daily need is {need} kcal. For your goal, about {target} kcal.'
+  ),
+  calcClosest: s('უახლოესი ხელმისაწვდომი რაციონი: {cal} კკალ.', 'Ближайший доступный рацион — {cal} ккал.', 'The closest available ration is {cal} kcal.'),
+  calcGap: s(
+    'ზუსტად თქვენი მიზნისთვის რაციონი ჯერ არ გვაქვს — მენიუს შევსებისას დაემატება.',
+    'Точно под вашу цель рациона пока нет — появится, когда мы пополним меню.',
+    'We do not have a ration right at your target yet — it will appear as the menu grows.'
+  ),
+  calcSafe: s(
+    'ეს უსაფრთხო მინიმუმზე დაბალია, ამიტომ მიზანი ავწიეთ. დიეტა ექიმთან შეათანხმეთ.',
+    'Это ниже безопасного минимума, поэтому цель мы подняли. Диету лучше согласовать с врачом.',
+    'That is below a safe minimum, so we raised the target. Please check a diet with a doctor.'
+  ),
+  calcNote: s(
+    'ფორმულა Mifflin–St Jeor. ეს ორიენტირია და არა სამედიცინო რეკომენდაცია.',
+    'Формула Миффлина — Сан Жеора. Это ориентир, а не медицинская рекомендация.',
+    'Mifflin–St Jeor formula. A guide, not medical advice.'
+  ),
+  recommended: s('რეკომენდებული', 'Рекомендуем', 'Recommended'),
+  pickCal: s('კალორიულობა', 'Калорийность', 'Calories'),
+  vsNeed: s('ნორმასთან შედარებით', 'к вашей норме', 'vs your need'),
+  quizTitle: s('არ იცით, რომელი რაციონი გჭირდებათ?', 'Не знаете, какой рацион вам нужен?', 'Not sure which ration you need?'),
+  quizSub: s('6 მარტივი კითხვა — და ჩვენ გამოვთვლით კალორიულობას', '6 простых вопросов — и мы рассчитаем калорийность', 'Six quick questions and we work out the calories'),
+  quizBtn: s('რაციონის შერჩევა', 'Подобрать рацион', 'Find my ration'),
+  quizReset: s('გასუფთავება', 'Сбросить', 'Reset'),
+  quizEdit: s('შეცვლა', 'Изменить', 'Edit'),
+  quizApply: s('არჩევა: {cal} კკალ', 'Выбрать {cal} ккал', 'Choose {cal} kcal'),
+  qSex: s('ვისთვის ვარჩევთ?', 'Для кого подбираем?', 'Who is it for?'),
+  qAge: s('რამდენი წლის ხართ?', 'Сколько вам лет?', 'How old are you?'),
+  qHeight: s('რა სიმაღლე გაქვთ?', 'Какой у вас рост?', 'How tall are you?'),
+  qWeight: s('რამდენს იწონით?', 'Сколько вы весите?', 'How much do you weigh?'),
+  qActivity: s('რამდენად აქტიური ხართ?', 'Насколько вы активны?', 'How active are you?'),
+  qGoal: s('რა არის თქვენი მიზანი?', 'Какая у вас цель?', 'What is your goal?'),
+  qResult: s('თქვენი რაციონი', 'Ваш рацион', 'Your ration'),
+  yrs: s('წლის', 'лет', 'years'),
+  cm: s('სმ', 'см', 'cm'),
+  kg: s('კგ', 'кг', 'kg'),
+  savedNote: s('პარამეტრები შეინახება ამ მოწყობილობაზე.', 'Параметры сохранятся на этом устройстве.', 'Your details are saved on this device.'),
+  contains: s('შეიცავს', 'Содержит', 'Contains'),
+  rBody: s('თქვენი სხეული', 'Ваше тело', 'Your body'),
+  rBmi: s('სმი', 'ИМТ', 'BMI'),
+  bmiUnder: s('წონის დეფიციტი', 'Недостаток веса', 'Underweight'),
+  bmiNormal: s('ნორმა', 'Норма', 'Healthy'),
+  bmiOver: s('ჭარბი წონა', 'Избыточный вес', 'Overweight'),
+  bmiObese: s('სიმსუქნე', 'Ожирение', 'Obesity'),
+  rHealthy: s('ჯანსაღი წონა თქვენი სიმაღლისთვის: {a}–{b} კგ', 'Здоровый вес для вашего роста: {a}–{b} кг', 'Healthy weight for your height: {a}–{b} kg'),
+  rCalories: s('კალორიები დღეში', 'Калории в день', 'Calories a day'),
+  rMaintain: s('შენარჩუნება', 'Поддержание', 'To maintain'),
+  rTarget: s('თქვენი მიზანი', 'Ваша цель', 'Your goal'),
+  rRation: s('არჩეული რაციონი', 'Выбранный рацион', 'Chosen ration'),
+  rMacros: s('ცილა · ცხიმი · ნახშირწყლები დღეში', 'БЖУ в день', 'Macros a day'),
+  rWater: s('წყალი', 'Вода', 'Water'),
+  rWaterText: s('დაახლოებით {l} ლიტრი დღეში', 'Около {l} л в день', 'About {l} L a day'),
+  rPace: s('ტემპი', 'Темп', 'Pace'),
+  rPaceText: s('დაახლოებით {kg} კგ კვირაში', 'Около {kg} кг в неделю', 'About {kg} kg a week'),
+  rPaceKeep: s('წონა სტაბილური დარჩება', 'Вес останется стабильным', 'Your weight stays steady'),
+  rChoose: s('აირჩიეთ რაციონი', 'Выберите рацион', 'Choose a ration'),
+  tooLow: s('თქვენთვის ძალიან ცოტაა', 'Слишком мало для вас', 'Too low for you'),
+  calcShort: s(
+    'ეს {diff} კკალ-ით ნაკლებია თქვენს მიზანზე — დანარჩენი შეგიძლიათ საკუთარი ულუფით შეავსოთ.',
+    'Это на {diff} ккал меньше вашей цели — недостающее можно добрать своим перекусом.',
+    'That is {diff} kcal under your target — top it up with a snack of your own.'
+  ),
+  mapExpand: s('გაშლა', 'На весь экран', 'Full screen'),
+  mapDone: s('მზადაა', 'Готово', 'Done'),
+  deliveryPoint: s('მიტანის წერტილი', 'Точка доставки', 'Delivery point'),
+  pickOnMap: s('მონიშნეთ მისამართი რუკაზე', 'Отметьте адрес на карте', 'Pin your address on the map'),
+  mapHint: s('დააჭირეთ რუკას ან გადაიტანეთ მარკერი', 'Нажмите на карту или перетащите метку', 'Tap the map or drag the pin'),
+  mapLocate: s('ჩემი მდებარეობა', 'Где я', 'Where am I'),
+  mapResolving: s('ვადგენთ მისამართს…', 'Определяем адрес…', 'Finding the address…'),
+  mapPinned: s('წერტილი მონიშნულია', 'Точка отмечена', 'Point pinned'),
+  mapGpsFail: s('მდებარეობა ვერ დადგინდა. ნება დართეთ ბრაუზერში ან მონიშნეთ რუკაზე.', 'Не удалось определить местоположение. Разрешите доступ в браузере или отметьте точку на карте.', 'Could not get your location. Allow it in the browser or pin the point on the map.'),
+  outOfZone: s('ამ წერტილში მიტანა ჯერ არ ხერხდება — დაგვირეკეთ.', 'В эту точку мы пока не доставляем — позвоните нам.', 'We do not deliver to this point yet — please call us.'),
+  soon: s('მალე', 'Скоро', 'Soon'),
+  inWork: s('მენიუ მუშავდება', 'Меню в проработке', 'Menu in the works'),
+  inWorkShort: s('მუშავდება', 'В проработке', 'In the works'),
+  payCourierCash: s('ნაღდი ფული კურიერთან', 'Наличными курьеру', 'Cash to the courier'),
+  payCourierCard: s('ბარათი კურიერთან', 'Картой курьеру', 'Card to the courier'),
+  dayMenuNote: s(
+    'რაციონი {kcal} კკალ · დღის მენიუ {sum} კკალ ({diff}). მონაცემები — რეალური პორციები.',
+    'Рацион {kcal} ккал · меню дня {sum} ккал ({diff}). Данные — реальные порции.',
+    'Ration {kcal} kcal · menu of the day {sum} kcal ({diff}). Real portions.'
+  ),
+  dayMenuOff: s(
+    'ამ დღის კერძები ჯერ ზუსტად არ ემთხვევა რაციონის კალორიებს — მენიუს შევსებისას დაიხვეწება.',
+    'Блюда этого дня пока не дают точно калорийность рациона — расчёт уточнится по мере пополнения меню.',
+    'The dishes of this day do not hit the ration calories exactly yet — it gets tighter as the menu grows.'
+  ),
+  grams: s('გ', 'г', 'g'),
+  portionNote: s(
+    'პორციები მორგებულია თქვენს {kcal} კკალ-ზე (×{k}). სტანდარტული პორციებით: {base} კკალ.',
+    'Порции подогнаны под ваши {kcal} ккал (×{k}). В стандартных порциях: {base} ккал.',
+    'Portions are scaled to your {kcal} kcal (×{k}). Standard portions: {base} kcal.'
+  ),
+  perMeals: s('კვება', 'приёма', 'meals'),
+  noRations: s(
+    'ამ დროისთვის რაციონები მიუწვდომელია — მენიუ ივსება. დაგვირეკეთ და დაგეხმარებით.',
+    'Рационы временно недоступны — меню пополняется. Позвоните нам, мы поможем.',
+    'Rations are temporarily unavailable — the menu is being filled. Call us and we will help.'
+  ),
   callUs: s('დაგვირეკეთ', 'Позвонить', 'Call us'),
   contactsTitle: s('კითხვები? ჩვენ ხაზზე ვართ', 'Есть вопросы? Мы на связи', 'Questions? We are here'),
   howTitle: s('როგორ მუშაობს', 'Как это работает', 'How it works'),
@@ -243,3 +422,6 @@ export const T = {
 };
 
 export const tr = (str: Str, l: Locale) => str[l];
+
+/** "приёма" / "приёмов" / "კვება" / "meals" for n meals. */
+export const mealsWord = (n: number, l: Locale) => (l === 'ru' ? (n < 5 ? 'приёма' : 'приёмов') : l === 'ka' ? 'კვება' : 'meals');

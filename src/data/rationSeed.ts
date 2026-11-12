@@ -34,7 +34,8 @@ interface Spec {
   ingredients: { ka: string[]; ru: string[]; en: string[] };
 }
 
-const img = (n: string) => `/images/meals/${n}.webp`;
+// Photos are NOT stored here: a stand-in picture of another dish is worse than none. Upload real ones in the admin panel.
+const img = (_name: string) => '';
 
 const SPECS: Spec[] = [
   // ───────────────────────── BREAKFAST ─────────────────────────
@@ -349,6 +350,188 @@ const SPECS: Spec[] = [
       en: ['Rice', 'Chuka seaweed', 'Cucumber', 'Lightly salted trout', 'Avocado', 'Sesame', 'Soy sauce'],
     },
   },
+  // ───────────────────── SECOND BATCH (workbook, status "existing") ─────────────────────
+  {
+    key: 'syrniki', day: 'sat', mealType: 'breakfast', image: '', weightGrams: 0, cookingMethod: 'baked',
+    tags: ['#Завтрак', '#ВысокийБелок'], allergens: ['Яйца', 'Лактоза', 'Глютен'], rating: 4.9,
+    name: { ru: 'Сырники со сметаной и ягодами', en: 'Cottage Cheese Syrniki with Berries' },
+    desc: {
+      ka: 'ნაზი ხაჭოს სირნიკები არაჟნითა და ახალი კენკროვანით.',
+      ru: 'Нежные сырники из обезжиренного творога со сметаной и ягодами.',
+      en: 'Tender low-fat cottage cheese pancakes with sour cream and berries.',
+    },
+    ingredients: {
+      ka: ['ხაჭო 0%', 'კვერცხის გული', 'ბრინჯის ფქვილი', 'ხორბლის ფქვილი', 'ფხვნილი შაქარი', 'კარაქი', 'არაჟანი 12%', 'უშაქრო კენკროვანი მურაბა', 'სეზონური კენკრა'],
+      ru: ['Творог 0%', 'Яичный желток', 'Рисовая мука', 'Пшеничная мука', 'Сахарная пудра', 'Сливочное масло', 'Сметана 12%', 'Ягодный джем без сахара', 'Сезонные ягоды'],
+      en: ['Cottage cheese 0%', 'Egg yolk', 'Rice flour', 'Wheat flour', 'Powdered sugar', 'Butter', 'Sour cream 12%', 'Sugar-free berry jam', 'Seasonal berries'],
+    },
+  },
+  {
+    key: 'protein-oatmeal', day: 'sun', mealType: 'breakfast', image: '', weightGrams: 300, cookingMethod: 'steamed',
+    tags: ['#Завтрак', '#ВысокийБелок'], allergens: ['Лактоза', 'Глютен'], rating: 4.8,
+    name: { ru: 'Протеиновая овсянка', en: 'Protein Oatmeal' },
+    desc: {
+      ka: 'ცილოვანი შვრიის ფაფა შოკოლადის გემოთი და ჩიას თესლით.',
+      ru: 'Овсянка с шоколадным протеином и семенами чиа.',
+      en: 'Oatmeal with chocolate protein and chia seeds.',
+    },
+    ingredients: {
+      ka: ['შოკოლადის პროტეინი', 'შვრიის ფანტელი', 'რძე 1,5%', 'ჩიას თესლი', 'კარაქი'],
+      ru: ['Шоколадный протеин', 'Овсяные хлопья', 'Молоко 1,5%', 'Семена чиа', 'Сливочное масло'],
+      en: ['Chocolate protein', 'Rolled oats', 'Milk 1.5%', 'Chia seeds', 'Butter'],
+    },
+  },
+  {
+    key: 'dushbara-potato-chicken', day: 'sun', mealType: 'lunch', image: '', weightGrams: 500, cookingMethod: 'baked',
+    tags: ['#Обед', '#ВысокийБелок'], allergens: [], rating: 4.8,
+    name: { ru: 'Картофель «душбара» с куриным бедром', en: 'Dushbara-style Potatoes with Chicken Thigh' },
+    desc: {
+      ka: 'კარტოფილი ქათმის ბარკლით, სტაფილოთი და ბულგარული წიწაკით.',
+      ru: 'Картофель с куриным бедром, морковью и болгарским перцем.',
+      en: 'Potatoes with chicken thigh, carrot and bell pepper.',
+    },
+    ingredients: {
+      ka: ['ქათმის ბარკლის ფილე', 'კარტოფილი', 'სტაფილო', 'ხახვი', 'ბულგარული წიწაკა', 'მწვანილი', 'კარი'],
+      ru: ['Филе куриного бедра', 'Картофель', 'Морковь', 'Лук', 'Болгарский перец', 'Зелень', 'Карри'],
+      en: ['Chicken thigh fillet', 'Potato', 'Carrot', 'Onion', 'Bell pepper', 'Herbs', 'Curry'],
+    },
+  },
+  {
+    key: 'bowl-bbq-chicken', day: 'fri', mealType: 'dinner', image: '', weightGrams: 430, cookingMethod: 'baked',
+    tags: ['#Ужин', '#Боул'], allergens: [], rating: 4.9,
+    name: { ru: 'Боул с курицей BBQ', en: 'BBQ Chicken Bowl' },
+    desc: {
+      ka: 'ბოული BBQ სოუსში ქათმით, ბასმათის ბრინჯითა და ავოკადოთი.',
+      ru: 'Боул с курицей в соусе BBQ, рисом басмати и авокадо.',
+      en: 'Bowl with BBQ chicken, basmati rice and avocado.',
+    },
+    ingredients: {
+      ka: ['ქათმის ფილე', 'ბასმათის ბრინჯი', 'BBQ სოუსი', 'კიტრი', 'ჩერი პომიდორი', 'სიმინდი', 'ავოკადო', 'პაპრიკა'],
+      ru: ['Куриное филе', 'Рис басмати', 'Соус BBQ', 'Огурец', 'Черри', 'Кукуруза', 'Авокадо', 'Паприка'],
+      en: ['Chicken fillet', 'Basmati rice', 'BBQ sauce', 'Cucumber', 'Cherry tomatoes', 'Corn', 'Avocado', 'Paprika'],
+    },
+  },
+  {
+    key: 'bowl-shrimp', day: 'sun', mealType: 'dinner', image: '', weightGrams: 480, cookingMethod: 'raw',
+    tags: ['#Ужин', '#Боул'], allergens: ['Ракообразные', 'Рыба', 'Яйца', 'Сезам'], rating: 4.8,
+    name: { ru: 'Боул с креветками', en: 'Shrimp Bowl' },
+    desc: {
+      ka: 'ბოული კრევეტით, ბრინჯით, ავოკადოთი და ახალი ბოსტნეულით.',
+      ru: 'Боул с креветками, рисом, авокадо и свежими овощами.',
+      en: 'Bowl with shrimp, rice, avocado and fresh vegetables.',
+    },
+    ingredients: {
+      ka: ['ბრინჯი', 'კრევეტი', 'კიტრი', 'პომიდორი', 'სიმინდი', 'ავოკადო', 'კრაბის ჯოხები', 'ყველი', 'მაიონეზი', 'სეზამი'],
+      ru: ['Рис', 'Креветки', 'Огурец', 'Помидор', 'Кукуруза', 'Авокадо', 'Крабовые палочки', 'Сыр', 'Майонез', 'Кунжут'],
+      en: ['Rice', 'Shrimp', 'Cucumber', 'Tomato', 'Corn', 'Avocado', 'Crab sticks', 'Cheese', 'Mayonnaise', 'Sesame'],
+    },
+  },
+  {
+    key: 'poke-chicken-teriyaki', day: 'tue', mealType: 'dinner', image: '', weightGrams: 290, cookingMethod: 'raw',
+    tags: ['#Ужин', '#Поке'], allergens: ['Соя', 'Сезам'], rating: 4.8,
+    name: { ru: 'Поке с курицей терияки', en: 'Chicken Teriyaki Poke' },
+    desc: {
+      ka: 'პოკე ქათმის მკერდით ტერიაკის სოუსში, ავოკადოთი და ედამამეთი.',
+      ru: 'Поке с куриной грудкой в соусе терияки, авокадо и эдамаме.',
+      en: 'Poke with teriyaki chicken breast, avocado and edamame.',
+    },
+    ingredients: {
+      ka: ['ქათმის მკერდი', 'ბრინჯი', 'ტერიაკის სოუსი', 'ავოკადო', 'კიტრი', 'ედამამე', 'სეზამი'],
+      ru: ['Куриная грудка', 'Рис', 'Соус терияки', 'Авокадо', 'Огурец', 'Эдамаме', 'Кунжут'],
+      en: ['Chicken breast', 'Rice', 'Teriyaki sauce', 'Avocado', 'Cucumber', 'Edamame', 'Sesame'],
+    },
+  },
+  // ── light salads and desserts: snack / dessert slots of the 4-6 meal rations ──
+  {
+    key: 'salad-crab', day: 'wed', mealType: 'snack', image: '', weightGrams: 225, cookingMethod: 'raw',
+    tags: ['#Перекус', '#Салат'], allergens: ['Рыба', 'Яйца'], rating: 4.6,
+    name: { ru: 'Диетический салат с крабовыми палочками', en: 'Light Crab Stick Salad' },
+    desc: {
+      ka: 'მსუბუქი სალათი კრაბის ჯოხებით, სიმინდითა და კიტრით.',
+      ru: 'Лёгкий салат с крабовыми палочками, кукурузой и огурцом.',
+      en: 'Light salad with crab sticks, corn and cucumber.',
+    },
+    ingredients: {
+      ka: ['კრაბის ჯოხები', 'სიმინდი', 'კვერცხი', 'კიტრი', 'ბრინჯი', 'მაიონეზი'],
+      ru: ['Крабовые палочки', 'Кукуруза', 'Яйцо', 'Огурец', 'Рис', 'Майонез'],
+      en: ['Crab sticks', 'Corn', 'Egg', 'Cucumber', 'Rice', 'Mayonnaise'],
+    },
+  },
+  {
+    key: 'salad-olivier', day: 'thu', mealType: 'snack', image: '', weightGrams: 235, cookingMethod: 'steamed',
+    tags: ['#Перекус', '#Салат'], allergens: ['Яйца'], rating: 4.6,
+    name: { ru: 'Диетический «Оливье»', en: 'Light Olivier Salad' },
+    desc: {
+      ka: 'დიეტური ოლივიე ქათმის მკერდით და მსუბუქი მაიონეზით.',
+      ru: 'Диетический оливье с куриной грудкой и лёгким майонезом.',
+      en: 'Light Olivier salad with chicken breast.',
+    },
+    ingredients: {
+      ka: ['ქათმის მკერდი', 'კარტოფილი', 'სტაფილო', 'კვერცხი', 'მარილიანი კიტრი', 'მწვანე ბარდა', 'მაიონეზი'],
+      ru: ['Куриная грудка', 'Картофель', 'Морковь', 'Яйцо', 'Солёный огурец', 'Зелёный горошек', 'Майонез'],
+      en: ['Chicken breast', 'Potato', 'Carrot', 'Egg', 'Pickled cucumber', 'Green peas', 'Mayonnaise'],
+    },
+  },
+  {
+    key: 'salad-stolichny', day: 'fri', mealType: 'snack', image: '', weightGrams: 260, cookingMethod: 'steamed',
+    tags: ['#Перекус', '#Салат'], allergens: ['Яйца'], rating: 4.6,
+    name: { ru: 'Диетический «Столичный» салат', en: 'Light Stolichny Salad' },
+    desc: {
+      ka: 'დიეტური „სტოლიჩნი“ მჭლე საქონლის ხორცით.',
+      ru: 'Диетический «Столичный» с нежирной говядиной.',
+      en: 'Light Stolichny salad with lean beef.',
+    },
+    ingredients: {
+      ka: ['მჭლე საქონლის ხორცი', 'კარტოფილი', 'სტაფილო', 'კვერცხი', 'მარილიანი კიტრი', 'მაიონეზი'],
+      ru: ['Нежирная говядина', 'Картофель', 'Морковь', 'Яйцо', 'Солёный огурец', 'Майонез'],
+      en: ['Lean beef', 'Potato', 'Carrot', 'Egg', 'Pickled cucumber', 'Mayonnaise'],
+    },
+  },
+  {
+    key: 'salad-shrimp', day: 'sat', mealType: 'snack', image: '', weightGrams: 500, cookingMethod: 'raw',
+    tags: ['#Перекус', '#Салат'], allergens: ['Ракообразные'], rating: 4.7,
+    name: { ru: 'Салат с креветками', en: 'Shrimp Salad' },
+    desc: {
+      ka: 'სალათი კრევეტით, ავოკადოთი, არუგულითა და ჩერი პომიდორით.',
+      ru: 'Салат с креветками, авокадо, рукколой и черри.',
+      en: 'Salad with shrimp, avocado, arugula and cherry tomatoes.',
+    },
+    ingredients: {
+      ka: ['კრევეტი', 'კიტრი', 'ჩერი პომიდორი', 'ავოკადო', 'არუგულა', 'სიმინდი', 'ლიმონის წვენი', 'ზეითუნის ზეთი'],
+      ru: ['Креветки', 'Огурец', 'Черри', 'Авокадо', 'Руккола', 'Кукуруза', 'Лимонный сок', 'Оливковое масло'],
+      en: ['Shrimp', 'Cucumber', 'Cherry tomatoes', 'Avocado', 'Arugula', 'Corn', 'Lemon juice', 'Olive oil'],
+    },
+  },
+  {
+    key: 'trifle-brownie', day: 'sun', mealType: 'dessert', image: '', weightGrams: 0, cookingMethod: 'baked',
+    tags: ['#Десерт', '#ВысокийБелок'], allergens: ['Яйца', 'Глютен', 'Лактоза'], rating: 4.9,
+    name: { ru: 'Трайфл брауни', en: 'Brownie Trifle' },
+    desc: {
+      ka: 'ცილოვანი ტრაიფლ-ბრაუნი შოკოლადის პუდინგითა და კენკროვანით.',
+      ru: 'Протеиновый трайфл-брауни с шоколадным пудингом и ягодами.',
+      en: 'Protein brownie trifle with chocolate pudding and berries.',
+    },
+    ingredients: {
+      ka: ['შვრია', 'კვერცხი', 'კაკაო', 'კეფირი', 'ცილოვანი შოკოლადის პუდინგი', 'კენკრა'],
+      ru: ['Овсяные хлопья', 'Яйцо', 'Какао', 'Кефир', 'Протеиновый шоколадный пудинг', 'Ягоды'],
+      en: ['Oats', 'Egg', 'Cocoa', 'Kefir', 'Chocolate protein pudding', 'Berries'],
+    },
+  },
+  {
+    key: 'cheesecake', day: 'mon', mealType: 'dessert', image: '', weightGrams: 0, cookingMethod: 'baked',
+    tags: ['#Десерт', '#ВысокийБелок'], allergens: ['Яйца', 'Глютен', 'Лактоза'], rating: 4.9,
+    name: { ru: 'Чизкейк', en: 'Cheesecake' },
+    desc: {
+      ka: 'მსუბუქი ჩიზქეიქი 0% ხაჭოთი.',
+      ru: 'Лёгкий чизкейк на твороге 0%.',
+      en: 'Light cheesecake made with 0% cottage cheese.',
+    },
+    ingredients: {
+      ka: ['ორცხობილა', 'კარამელის პუდინგი', 'ხაჭო 0%', 'კვერცხი', 'ვანილი'],
+      ru: ['Печенье', 'Карамельный пудинг', 'Творог 0%', 'Яйцо', 'Ваниль'],
+      en: ['Biscuit', 'Caramel pudding', 'Cottage cheese 0%', 'Egg', 'Vanilla'],
+    },
+  },
 ];
 const ALLERGEN_KA: Record<string, string> = {
   'Яйца': 'კვერცხი',
@@ -356,6 +539,9 @@ const ALLERGEN_KA: Record<string, string> = {
   'Глютен': 'გლუტენი',
   'Рыба': 'თევზი',
   'Соя': 'სოია',
+  'Орехи': 'კაკალი',
+  'Ракообразные': 'კიბოსნაირები',
+  'Сезам': 'სეზამი',
 };
 
 const CATEGORY: Record<string, string> = {
@@ -373,6 +559,18 @@ const CATEGORY: Record<string, string> = {
   'bowl-chicken-thigh': 'poultry',
   'chicken-broccoli-buckwheat': 'poultry',
   'bowl-trout': 'fish',
+  'syrniki': 'breakfast',
+  'protein-oatmeal': 'breakfast',
+  'dushbara-potato-chicken': 'poultry',
+  'bowl-bbq-chicken': 'poultry',
+  'bowl-shrimp': 'fish',
+  'poke-chicken-teriyaki': 'poultry',
+  'salad-crab': 'salad',
+  'salad-olivier': 'salad',
+  'salad-stolichny': 'salad',
+  'salad-shrimp': 'salad',
+  'trifle-brownie': 'dessert',
+  'cheesecake': 'dessert',
 };
 
 /** Rows ready to upsert into `partner_products`. */
@@ -402,3 +600,92 @@ export const rationSeedRows = SPECS.map(s => {
     badge: null,
   };
 });
+
+// ───────────────────────── SNACKS ─────────────────────────
+// Light snacks for the 4-6 meals-a-day rations. Typed by hand (not in the Excel base): the numbers
+// are per-portion reference values — check them against the kitchen's real products and fix in the
+// admin panel if they differ. Push only these with:
+//   node --experimental-strip-types scripts/seed_ration_dishes.mts --snacks [--write]
+interface SnackSpec {
+  key: string;
+  day: DayOfWeek;
+  weightGrams: number;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  allergens: string[];
+  name: { ka: string; ru: string; en: string };
+  desc: { ka: string; ru: string; en: string };
+  ingredients: { ka: string[]; ru: string[]; en: string[] };
+}
+
+const SNACKS: SnackSpec[] = [
+  {
+    key: 'snack-apple', day: 'mon', weightGrams: 180, calories: 94, protein: 0.5, fat: 0.4, carbs: 25, allergens: [],
+    name: { ka: 'ვაშლი', ru: 'Яблоко', en: 'Apple' },
+    desc: { ka: 'ახალი ვაშლი.', ru: 'Свежее яблоко.', en: 'A fresh apple.' },
+    ingredients: { ka: ['ვაშლი'], ru: ['Яблоко'], en: ['Apple'] },
+  },
+  {
+    key: 'snack-banana', day: 'tue', weightGrams: 120, calories: 107, protein: 1.3, fat: 0.4, carbs: 27, allergens: [],
+    name: { ka: 'ბანანი', ru: 'Банан', en: 'Banana' },
+    desc: { ka: 'ახალი ბანანი.', ru: 'Свежий банан.', en: 'A fresh banana.' },
+    ingredients: { ka: ['ბანანი'], ru: ['Банан'], en: ['Banana'] },
+  },
+  {
+    key: 'snack-barni', day: 'wed', weightGrams: 30, calories: 130, protein: 2, fat: 6, carbs: 17, allergens: ['Глютен', 'Лактоза', 'Яйца'],
+    name: { ka: 'ბარნი', ru: 'Барни', en: 'Barni cake' },
+    desc: { ka: 'რბილი ბისკვიტი რძის კრემით.', ru: 'Мягкий бисквит с молочной начинкой.', en: 'Soft sponge cake with a milk filling.' },
+    ingredients: { ka: ['ბისკვიტი', 'რძის კრემი'], ru: ['Бисквит', 'Молочная начинка'], en: ['Sponge cake', 'Milk filling'] },
+  },
+  {
+    key: 'snack-oat-cookie', day: 'thu', weightGrams: 40, calories: 170, protein: 3, fat: 6, carbs: 26, allergens: ['Глютен', 'Яйца'],
+    name: { ka: 'შვრიის ორცხობილა', ru: 'Овсяное печенье', en: 'Oat cookie' },
+    desc: { ka: 'შვრიის ორცხობილა.', ru: 'Овсяное печенье.', en: 'An oat cookie.' },
+    ingredients: { ka: ['შვრიის ფანტელი', 'ფქვილი', 'კვერცხი'], ru: ['Овсяные хлопья', 'Мука', 'Яйцо'], en: ['Oats', 'Flour', 'Egg'] },
+  },
+  {
+    key: 'snack-greek-yogurt', day: 'fri', weightGrams: 150, calories: 110, protein: 14, fat: 3, carbs: 7, allergens: ['Лактоза'],
+    name: { ka: 'ბერძნული იოგურტი', ru: 'Греческий йогурт', en: 'Greek yogurt' },
+    desc: { ka: 'ბერძნული იოგურტი, მაღალი ცილით.', ru: 'Греческий йогурт, много белка.', en: 'Greek yogurt, high in protein.' },
+    ingredients: { ka: ['ბერძნული იოგურტი'], ru: ['Греческий йогурт'], en: ['Greek yogurt'] },
+  },
+  {
+    key: 'snack-nuts', day: 'sat', weightGrams: 30, calories: 180, protein: 5, fat: 16, carbs: 4, allergens: ['Орехи'],
+    name: { ka: 'თხილეულის ნაკრები', ru: 'Микс орехов', en: 'Nut mix' },
+    desc: { ka: 'ნუშის, თხილისა და ნიგვზის ნარევი.', ru: 'Смесь миндаля, фундука и грецкого ореха.', en: 'A mix of almonds, hazelnuts and walnuts.' },
+    ingredients: { ka: ['ნუში', 'თხილი', 'ნიგოზი'], ru: ['Миндаль', 'Фундук', 'Грецкий орех'], en: ['Almonds', 'Hazelnuts', 'Walnuts'] },
+  },
+  {
+    key: 'snack-pear', day: 'sun', weightGrams: 170, calories: 98, protein: 0.6, fat: 0.2, carbs: 26, allergens: [],
+    name: { ka: 'მსხალი', ru: 'Груша', en: 'Pear' },
+    desc: { ka: 'ახალი მსხალი.', ru: 'Свежая груша.', en: 'A fresh pear.' },
+    ingredients: { ka: ['მსხალი'], ru: ['Груша'], en: ['Pear'] },
+  },
+];
+
+/** Snack rows ready to upsert into `partner_products` (channel "site"). No photo yet — upload in the admin panel. */
+export const snackSeedRows = SNACKS.map(s => ({
+  id: `dish-sn-${s.key}`,
+  slug: s.key,
+  name: s.name,
+  description: s.desc,
+  category: 'snack',
+  category_name: { ka: 'snack', ru: 'snack', en: 'snack' },
+  meal_type: 'snack' as MealType,
+  day: s.day,
+  price: 0,
+  cost_price: 0,
+  calories: s.calories,
+  protein: s.protein,
+  fat: s.fat,
+  carbs: s.carbs,
+  weight_grams: s.weightGrams,
+  image: '',
+  ingredients: s.ingredients,
+  allergens: s.allergens.map(a => ALLERGEN_KA[a] ?? a),
+  cooking_method: 'classic',
+  target_channels: ['site'],
+  badge: null,
+}));

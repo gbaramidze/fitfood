@@ -40,6 +40,8 @@ export interface AdminDish {
   isGeorgianFit: boolean;
   inStockCount?: number;
   sortOrder?: number;
+  /** STOP: hidden from the site rations and the kitchen plan until switched back on. */
+  stopped?: boolean;
   createdAt: string;
 }
 

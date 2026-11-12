@@ -296,6 +296,7 @@ export function formatRationOrderNotification(o: {
   zone: string;
   address: string;
   payment: string;
+  payCode?: string;
   total: number;
   stopList?: string[];
   swaps?: string[];
@@ -312,6 +313,7 @@ export function formatRationOrderNotification(o: {
     `📍 ${escapeHtml(o.zone)} — ${escapeHtml(o.address)}`,
     `💳 ${escapeHtml(o.payment)} · <b>${o.total} GEL</b>`,
   ];
+  if (o.payCode) lines.push(`🔑 Код оплаты: <code>${escapeHtml(o.payCode)}</code>`);
   if (o.stopList && o.stopList.length) lines.push(`⛔ <b>Стоп-лист:</b> ${escapeHtml(o.stopList.join(', '))}`);
   if (o.swaps && o.swaps.length) lines.push(`🔄 <b>Замены:</b> ${escapeHtml(o.swaps.join('; '))}`);
   if (o.comment) lines.push(`💬 <i>${escapeHtml(o.comment)}</i>`);

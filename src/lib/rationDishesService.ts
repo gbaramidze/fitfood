@@ -56,7 +56,7 @@ export function mapProductToDish(row: any): Dish {
       carbs: Number(row.carbs) || 0,
       weightGrams: Number(row.weight_grams) || 0,
     },
-    image: row.image || '/images/meals/chicken-ptitim.webp',
+    image: row.image || '', // no photo in the database = no photo (the page shows a neutral plate)
     tags: [],
     allergens: list(row.allergens),
     isGeorgianFit: false,
@@ -70,6 +70,7 @@ export function mapProductToDish(row: any): Dish {
     rating: 0,
     channels,
     rationOnly: channels.includes('site') && !channels.includes('pos'),
+    stopped: Boolean(row.stopped),
     sortOrder: row.sort_order == null ? undefined : Number(row.sort_order),
   };
 }
@@ -86,6 +87,7 @@ export async function fetchRationDishes(): Promise<Dish[] | null> {
     if (error || !data) return null;
     return data
       .filter((r: any) => r.category !== 'drinks')
+      .filter((r: any) => !r.stopped) // the stop-list: not served until switched back on
       .filter((r: any) => {
         const ch = list(r.target_channels);
         return ch.length === 0 || ch.includes('site'); // untagged rows follow the admin default ["site","pos"]

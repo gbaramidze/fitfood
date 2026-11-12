@@ -70,6 +70,8 @@ interface AdminContextType {
   addDish: (dish: Omit<AdminDish, 'id' | 'createdAt'>) => Promise<AdminDish>;
   updateDish: (id: string, updates: Partial<AdminDish>) => Promise<boolean>;
   deleteDish: (id: string) => Promise<boolean>;
+  /** Put a dish on the stop-list (or take it off). Needs supabase/add_dish_stop.sql. */
+  setDishStopped: (id: string, stopped: boolean) => Promise<boolean>;
   setDishesOrder: (orderedDishes: AdminDish[]) => Promise<boolean>;
 
   // Programs Actions
@@ -536,6 +538,19 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
       } catch (err) {
         console.error('Failed to update dish in Supabase:', err);
       }
+    }
+    return true;
+  };
+
+  const setDishStopped = async (id: string, stopped: boolean): Promise<boolean> => {
+    setDishes(prev => prev.map(d => (d.id === id ? { ...d, stopped } : d)));
+    if (!isSupabaseConfigured) return true;
+    // a targeted update: the full-row saves never touch this column, and an old database without it just says so
+    const { error } = await supabase.from('partner_products').update({ stopped }).eq('id', id);
+    if (error) {
+      setDishes(prev => prev.map(d => (d.id === id ? { ...d, stopped: !stopped } : d)));
+      console.error('Stop-list update failed:', error.message);
+      return false;
     }
     return true;
   };
@@ -1152,6 +1167,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({
         addDish,
         updateDish,
         deleteDish,
+        setDishStopped,
         setDishesOrder,
         addProgram,
         updateProgram,

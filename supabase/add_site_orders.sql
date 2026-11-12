@@ -20,9 +20,13 @@ CREATE TABLE IF NOT EXISTS site_orders (
   subtotal NUMERIC(10, 2) NOT NULL,
   delivery_fee NUMERIC(10, 2) NOT NULL DEFAULT 0,
   total NUMERIC(10, 2) NOT NULL,             -- calculated on the server, never taken from the browser
-  payment_method TEXT NOT NULL DEFAULT 'cash',   -- 'cash' | 'card' | 'online'
+  payment_method TEXT NOT NULL DEFAULT 'online', -- 'online' | 'transfer' | 'gym'
   payment_status TEXT NOT NULL DEFAULT 'unpaid', -- 'unpaid' | 'pending' | 'paid' | 'failed'
   payment_ref TEXT,                          -- id at the payment provider
+  payment_code TEXT,                         -- 'gym' payments: code the customer tells at the gym (partner window, later)
+  pay_point_id TEXT,                         -- 'gym' payments: partner_points.id of the chosen gym
+  paid_at TIMESTAMPTZ,
+  paid_amount NUMERIC(10, 2),
   payment_log JSONB NOT NULL DEFAULT '[]'::jsonb,
   status TEXT NOT NULL DEFAULT 'new',        -- 'new' | 'confirmed' | 'active' | 'completed' | 'cancelled'
   language TEXT DEFAULT 'ru',
@@ -30,6 +34,7 @@ CREATE TABLE IF NOT EXISTS site_orders (
 );
 
 CREATE INDEX IF NOT EXISTS idx_site_orders_phone ON site_orders(phone_digits);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_site_orders_pay_code ON site_orders(payment_code) WHERE payment_code IS NOT NULL;
 
 ALTER TABLE site_orders ENABLE ROW LEVEL SECURITY;
 

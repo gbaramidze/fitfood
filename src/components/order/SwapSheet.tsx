@@ -1,24 +1,23 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ChevronRight, X } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { ChevronRight, X } from 'lucide-react';
 import { Dish, Locale } from '@/types';
 import { swapCandidates } from '@/lib/rationRotation';
 import { T } from './orderData';
+import { DishImage } from './DishImage';
 
 interface Props {
   locale: Locale;
   current: Dish;
   pool: Dish[];
-  /** returns the stop-list names a dish conflicts with (empty = safe) */
-  conflicts: (d: Dish) => string[];
+  /** allergens a dish contains, in the customer's language */
+  allergensOf: (d: Dish) => string[];
   onPick: (d: Dish) => void;
   onClose: () => void;
 }
 
-export function SwapSheet({ locale, current, pool, conflicts, onPick, onClose }: Props) {
-  const [safeOnly, setSafeOnly] = useState(false);
-
+export function SwapSheet({ locale, current, pool, allergensOf, onPick, onClose }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -30,10 +29,7 @@ export function SwapSheet({ locale, current, pool, conflicts, onPick, onClose }:
     };
   }, [onClose]);
 
-  const list = swapCandidates(current, pool)
-    .map(d => ({ d, bad: conflicts(d) }))
-    .filter(x => !safeOnly || x.bad.length === 0)
-    .sort((a, b) => a.bad.length - b.bad.length);
+  const list = swapCandidates(current, pool).map(d => ({ d, has: allergensOf(d) }));
 
   return (
     <div className="ord-sheet-back" onClick={onClose} role="presentation">
@@ -47,16 +43,10 @@ export function SwapSheet({ locale, current, pool, conflicts, onPick, onClose }:
             <X size={18} />
           </button>
         </div>
-        <div className="ord-sheet-tools">
-          <button type="button" className="ord-chip sm" aria-pressed={safeOnly} onClick={() => setSafeOnly(v => !v)}>
-            {T.safeOnly[locale]}
-          </button>
-        </div>
         <div className="ord-sheet-list">
-          {list.map(({ d, bad }) => (
-            <button key={d.id} type="button" className={`ord-cand ${bad.length ? 'bad' : ''}`} onClick={() => onPick(d)}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={d.image} alt="" loading="lazy" />
+          {list.map(({ d, has }) => (
+            <button key={d.id} type="button" className="ord-cand" onClick={() => onPick(d)}>
+              <DishImage src={d.image} alt={d.name[locale]} />
               <div>
                 <b>{d.name[locale]}</b>
                 <div className="ord-macros">
@@ -65,11 +55,7 @@ export function SwapSheet({ locale, current, pool, conflicts, onPick, onClose }:
                   <span>{T.fat[locale]} {d.macros.fat}</span>
                   <span>{T.carbs[locale]} {d.macros.carbs}</span>
                 </div>
-                {bad.length > 0 && (
-                  <div className="ord-warn" style={{ marginTop: 6 }}>
-                    <AlertTriangle size={13} /> {T.conflict[locale]}: {bad.join(', ')}
-                  </div>
-                )}
+                {has.length > 0 && <div className="ord-contains">{T.contains[locale]}: {has.join(', ')}</div>}
               </div>
               <ChevronRight size={18} color="#64748b" />
             </button>

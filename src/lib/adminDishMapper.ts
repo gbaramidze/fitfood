@@ -120,7 +120,7 @@ export function mapSupabaseProductToAdminDish(row: any): AdminDish {
   const costPrice = Number(row.cost_price) || Number(row.costPrice) || 0;
 
   // 8. Image
-  const image = row.image || '/images/meals/chicken-ptitim.webp';
+  const image = row.image || ''; // no photo stays empty — never a stand-in picture (saving would store it)
 
   return {
     id: String(row.id || `dish-${Date.now()}`),
@@ -141,6 +141,7 @@ export function mapSupabaseProductToAdminDish(row: any): AdminDish {
     ingredients: { ka: ingKa, ru: ingRu, en: ingEn },
     isGeorgianFit: true,
     inStockCount: Number(row.in_stock_count) || Number(row.inStockCount) || 0,
+    stopped: Boolean(row.stopped),
     sortOrder: row.sort_order !== undefined ? Number(row.sort_order) : row.sortOrder !== undefined ? Number(row.sortOrder) : undefined,
     createdAt: row.created_at || new Date().toISOString(),
   };

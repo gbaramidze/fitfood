@@ -89,7 +89,7 @@ CREATE POLICY "Public Delete Product Images" ON storage.objects
   FOR DELETE USING (bucket_id = 'product-images');`;
 
 export const AdminDishesManager: React.FC = () => {
-  const { dishes, sales, points, addDish, updateDish, deleteDish, setDishesOrder, searchQuery, refreshDishes, isLoadingDishes } = useAdmin();
+  const { dishes, sales, points, addDish, updateDish, deleteDish, setDishStopped, setDishesOrder, searchQuery, refreshDishes, isLoadingDishes } = useAdmin();
 
   const [channelFilter, setChannelFilter] = useState<'all' | 'site' | 'pos'>('all');
   const [dayFilter, setDayFilter] = useState<string>('all');
@@ -1277,7 +1277,7 @@ export const AdminDishesManager: React.FC = () => {
                 return (
                   <div
                     key={dish.id}
-                    className="admin-dish-row"
+                    className={`admin-dish-row${dish.stopped ? ' is-stopped' : ''}`}
                     style={isJustAdded ? {
                       borderColor: '#10B981',
                       boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.4)',
@@ -1287,6 +1287,7 @@ export const AdminDishesManager: React.FC = () => {
                       <LazyProductImage
                         productId={dish.id}
                         src={dish.image}
+                        fallbackSrc="/images/no-photo.svg"
                         alt={dish.name?.ka || dish.name?.ru || 'კერძი'}
                         sizes="52px"
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -1298,6 +1299,7 @@ export const AdminDishesManager: React.FC = () => {
                         <span className="admin-dish-row-title">
                           {dish.name?.ka || dish.name?.ru || dish.name?.en || 'კერძი'}
                         </span>
+                        {dish.stopped && <span className="table-badge badge-stop">⛔ СТОП</span>}
                         {isJustAdded && <span className="table-badge badge-green">✨ ახალი</span>}
                         {(!dish.targetChannels || dish.targetChannels.includes('site')) && <span className="channel-badge badge-site">🌐 საიტი</span>}
                         {(!dish.targetChannels || dish.targetChannels.includes('pos')) && <span className="channel-badge badge-pos">🏢 დარბაზი</span>}
@@ -1347,6 +1349,16 @@ export const AdminDishesManager: React.FC = () => {
                         title="გაყიდვების დინამიკა (გრაფიკი)"
                       >
                         📈 გაყიდვები
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const ok = await setDishStopped(dish.id, !dish.stopped);
+                          if (!ok) alert('СТОП не сохранился. Выполните supabase/add_dish_stop.sql в Supabase SQL Editor (один раз) и повторите.');
+                        }}
+                        className={`btn-dish-stop${dish.stopped ? ' on' : ''}`}
+                        title={dish.stopped ? 'Вернуть в меню' : 'Поставить на СТОП: скрыть с сайта и из плана кухни'}
+                      >
+                        {dish.stopped ? '✅ Вернуть' : '⛔ СТОП'}
                       </button>
                       <button onClick={() => openEditModal(dish)} className="btn-dish-edit" style={{ flex: 'initial', padding: '6px 10px' }}>
                         ✏️

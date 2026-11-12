@@ -38,6 +38,19 @@ WANTED = {
     'lentil-soup-puree': 'ოსპის სუპი',
     'chicken-broccoli-buckwheat': 'ქათამი ბროკოლით და წიწიბურით',
     'shawarma-burrito': 'შაურმა ქათმით',
+    # second batch of the workbook
+    'syrniki': 'სირნიკები',
+    'protein-oatmeal': 'ცილოვანი ოატმილი',
+    'dushbara-potato-chicken': 'დუშბარული კარტოფილი',
+    'bowl-bbq-chicken': 'ბოული BBQ ქათმით',
+    'bowl-shrimp': 'ბოული კრევეტით',
+    'poke-chicken-teriyaki': 'პოკე ქათმის ტერიაკით',
+    'salad-crab': 'დიეტური კიბორჩხალას სალათი',
+    'salad-olivier': 'ოლივიეს',
+    'salad-stolichny': 'სტოლიჩნის',
+    'salad-shrimp': 'სალათი კრევეტით',
+    'trifle-brownie': 'ტრაიფლ ბრაუნი',
+    'cheesecake': 'ჩიზქეიქი',
 }
 
 

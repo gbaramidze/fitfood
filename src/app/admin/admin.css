@@ -2601,3 +2601,11 @@
     padding: 14px;
   }
 }
+
+/* STOP-list */
+.admin-dish-row.is-stopped { opacity: .6; border-color: rgba(239, 68, 68, .5); background: rgba(239, 68, 68, .06); }
+.badge-stop { background: rgba(239, 68, 68, .2); color: #FCA5A5; border: 1px solid rgba(239, 68, 68, .5); font-weight: 800; }
+.btn-dish-stop { background: #1F2937; border: 1px solid rgba(239, 68, 68, .5); color: #FCA5A5; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.btn-dish-stop:hover { background: rgba(239, 68, 68, .25); }
+.btn-dish-stop.on { border-color: rgba(16, 185, 129, .6); color: #6EE7B7; }
+.btn-dish-stop.on:hover { background: rgba(16, 185, 129, .2); }

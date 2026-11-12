@@ -2,6 +2,12 @@ import crypto from 'node:crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { createPayzePayment, onlinePaymentsConfigured } from '@/lib/payments/payze';
 
+/** 6-character payment code for cash payments at a gym (no 0/O/1/I so it is easy to read out loud). */
+export const newPayCode = () => {
+  const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 6 }, () => A[crypto.randomInt(A.length)]).join('');
+};
+
 export const newOrderId = () => `FF-${crypto.randomInt(100000, 1000000)}`;
 
 /** Creates the card-payment link for a stored order and marks it "pending". Returns null when online payment is not set up. */

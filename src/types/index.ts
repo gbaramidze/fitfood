@@ -58,6 +58,8 @@ export interface Dish {
   swappableWith?: string[]; // IDs of dishes that can replace this one
   /** Sold only inside rations (meal plans) — channel "site" without "pos". */
   rationOnly?: boolean;
+  /** On the stop-list: not served until switched back on. */
+  stopped?: boolean;
   /** Where the dish is sold, as stored in the database ("site" = rations, "pos" = hall showcase). */
   channels?: string[];
   sortOrder?: number;
