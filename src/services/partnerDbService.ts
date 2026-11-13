@@ -73,7 +73,9 @@ export const partnerDbService = {
         .from('partner_products')
         .select('id, name, category, category_name, price, cost_price, calories, weight_grams, image, badge, created_at, slug, description, meal_type, day, protein, fat, carbs, ingredients, allergens, cooking_method, target_channels, updated_at');
       if (error || !data || data.length === 0) return null;
-      const mapped = data.map(prod => {
+      // Partners only see dishes that the admin marked for sale at points ("pos" channel).
+      const posRows = data.filter(prod => mapSupabaseProductToAdminDish(prod).targetChannels.includes('pos'));
+      const mapped = posRows.map(prod => {
         const dish = mapSupabaseProductToAdminDish(prod);
 
         // Normalize Category

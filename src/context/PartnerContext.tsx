@@ -247,7 +247,8 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .channel('partner_realtime_sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_products' }, async () => {
           const freshProducts = await partnerDbService.getProducts();
-          if (freshProducts && freshProducts.length > 0) {
+          // An empty list is valid: all dishes may have been unmarked for sale at points.
+          if (freshProducts) {
             setProducts(sortPartnerProducts(freshProducts));
           }
         })
