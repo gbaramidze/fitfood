@@ -62,6 +62,36 @@ export function allowedLevels<T extends { cal: number }>(levels: T[], target: nu
   return near ? [near] : [];
 }
 
+/**
+ * Protein and fat are set per kg of body weight; carbs are whatever calories remain.
+ *   protein  g/kg: lose 1.8 · maintain 1.6 · gain 1.8
+ *   fat      g/kg: lose 0.6 · maintain 1.0 · gain 1.0
+ *   carbs    = (kcal − 4·protein − 9·fat) / 4
+ */
+export const PROTEIN_PER_KG: Record<Goal, number> = { lose: 1.8, maintain: 1.6, gain: 1.8 };
+export const FAT_PER_KG: Record<Goal, number> = { lose: 0.6, maintain: 1, gain: 1 };
+
+export interface MacroGoal { protein: number; fat: number; carbs: number }
+
+export function macroGoalFor(weightKg: number, goal: Goal, kcal: number): MacroGoal {
+  const protein = Math.round(weightKg * PROTEIN_PER_KG[goal]);
+  const fat = Math.round(weightKg * FAT_PER_KG[goal]);
+  const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
+  return { protein, fat, carbs };
+}
+
+/**
+ * The goal travels with the order as a short readable tag in the comment / client notes
+ * ("БЖУ-цель: Б166 Ж74 У240"), so the kitchen and the account page build the very same menu
+ * the customer saw — without a new database column.
+ */
+export const formatMacroGoal = (g: MacroGoal) => `БЖУ-цель: Б${g.protein} Ж${g.fat} У${g.carbs}`;
+
+export function parseMacroGoal(text: string | null | undefined): MacroGoal | undefined {
+  const m = /БЖУ-цель:\s*Б(\d+)\s*Ж(\d+)\s*У(\d+)/.exec(text || '');
+  return m ? { protein: Number(m[1]), fat: Number(m[2]), carbs: Number(m[3]) } : undefined;
+}
+
 export type BmiClass = 'under' | 'normal' | 'over' | 'obese';
 
 export interface Report {
@@ -85,10 +115,7 @@ export function buildReport(i: CalcInput, c: CalcResult): Report {
   const m = i.heightCm / 100;
   const bmi = i.weightKg / (m * m);
   const bmiClass: BmiClass = bmi < 18.5 ? 'under' : bmi < 25 ? 'normal' : bmi < 30 ? 'over' : 'obese';
-  const perKg = i.goal === 'maintain' ? 1.5 : 1.8; // protein, g per kg
-  const protein = Math.round(i.weightKg * perKg);
-  const fat = Math.round((c.target * 0.28) / 9);
-  const carbs = Math.max(0, Math.round((c.target - protein * 4 - fat * 9) / 4));
+  const { protein, fat, carbs } = macroGoalFor(i.weightKg, i.goal, c.target);
   const extra = i.activity === 'high' ? 0.5 : i.activity === 'moderate' ? 0.3 : 0;
   return {
     bmi: Math.round(bmi * 10) / 10,

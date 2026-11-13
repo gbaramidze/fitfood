@@ -3,6 +3,13 @@ import { KitchenClient, KitchenDeliverySlot } from '@/types/kitchen';
 import { dayKeyOf } from '@/lib/salesForecastHelper';
 import { buildMenu, MEAL_ORDER } from '@/lib/rationRotation';
 import { mealsFor } from '@/lib/rationOptions';
+import { parseMacroGoal } from '@/lib/calorieCalc';
+
+/** YYYY-MM-DD -> local Date (undefined when missing / malformed) */
+const parseDayKey = (k?: string): Date | undefined => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(k || '');
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : undefined;
+};
 
 const WEEKDAY_KEYS: DayOfWeek[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
@@ -105,7 +112,7 @@ export function computeRationPlan(
   // a dish that a client eats twice in a day counts twice. Portion size follows the calorie tier.
   const perDish = new Map<string, { dish: Dish; total: number; tiers: Map<number, number>; clients: Set<string> }>();
   active.forEach(c => {
-    buildMenu(targetDate, mealsFor(c.programId, c.calories), siteDishes, c.calories).forEach(({ dish }) => {
+    buildMenu(targetDate, mealsFor(c.programId, c.calories), siteDishes, c.calories, parseMacroGoal(c.notes), parseDayKey(c.startDate)).forEach(({ dish }) => {
       const cur = perDish.get(dish.id) || { dish, total: 0, tiers: new Map<number, number>(), clients: new Set<string>() };
       cur.total += 1;
       cur.tiers.set(c.calories, (cur.tiers.get(c.calories) || 0) + 1);

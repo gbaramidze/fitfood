@@ -9,7 +9,7 @@ import {
 import { useLanguage } from '@/context/LanguageContext';
 import { Dish, Locale, Program } from '@/types';
 import { programs } from '@/data/programs';
-import { Goal, allowedLevels, calcCalories, nearestLevel } from '@/lib/calorieCalc';
+import { Goal, allowedLevels, calcCalories, formatMacroGoal, macroGoalFor, nearestLevel } from '@/lib/calorieCalc';
 import { ClientProfile, DEFAULT_PROFILE, clearProfile, loadProfile, saveProfile } from '@/lib/clientProfile';
 import { zoneForPoint } from '@/data/batumiZones';
 import { ALLERGENS_DATABASE } from '@/data/allergensList';
@@ -55,6 +55,10 @@ const PAY_LABEL: Record<PayId, 'payOnline' | 'payTransfer' | 'payGym'> = { onlin
 const PAY_SUB: Record<PayId, 'payOnlineSub' | 'payTransferSub' | 'payGymSub'> = { online: 'payOnlineSub', transfer: 'payTransferSub', gym: 'payGymSub' };
 
 const LAST_STEP = 4;
+
+/** swap value meaning "this dish is dropped from the day" */
+const REMOVED = '__none__';
+const SNACK_LIKE = ['snack', 'dessert', 'smoothie'];
 
 export function OrderExperience() {
   const { locale: l, setLocale } = useLanguage();
@@ -205,14 +209,21 @@ export function OrderExperience() {
     [l]
   );
 
+  // what the customer's body needs (protein / fat per kg, the rest carbs) - the menu is built to land on it
+  const macroGoal = useMemo(
+    () => (profileSet ? macroGoalFor(profile.weightKg, profile.goal, calories) : undefined),
+    [profileSet, profile.weightKg, profile.goal, calories]
+  );
+
   const effectiveMenu = useCallback(
-    (date: Date): { key: string; baseId: string; dish: Dish; swapped: boolean }[] =>
-      buildMenu(date, meals, dishes, calories).map(({ slot: sl, dish: base }) => {
+    (date: Date): { key: string; baseId: string; dish: Dish; swapped: boolean; removed: boolean }[] =>
+      buildMenu(date, meals, dishes, calories, macroGoal, startDate).map(({ slot: sl, dish: base }) => {
         const key = `${dayKey(date)}|${sl}|${base.id}`;
-        const picked = swaps[key] ? dishes.find(d => d.id === swaps[key]) : undefined;
-        return { key, baseId: base.id, dish: picked ?? base, swapped: Boolean(picked) };
+        const removed = swaps[key] === REMOVED;
+        const picked = swaps[key] && !removed ? dishes.find(d => d.id === swaps[key]) : undefined;
+        return { key, baseId: base.id, dish: picked ?? base, swapped: Boolean(picked) || removed, removed };
       }),
-    [swaps, dishes, meals, calories]
+    [swaps, dishes, meals, calories, macroGoal, startDate]
   );
 
   const dayMenu = useMemo(
@@ -223,7 +234,7 @@ export function OrderExperience() {
   // Real portions from the database: the day's totals are simply the sum of its dishes.
   const dayTotals = useMemo(
     () =>
-      dayMenu.reduce(
+      dayMenu.filter(m => !m.removed).reduce(
         (a, m) => ({
           kcal: a.kcal + m.dish.macros.calories,
           p: a.p + m.dish.macros.protein,
@@ -235,6 +246,39 @@ export function OrderExperience() {
     [dayMenu]
   );
   const diffPct = calories > 0 ? Math.round(((dayTotals.kcal - calories) / calories) * 100) : 0;
+
+  // The customer swapped dishes and the day now exceeds the ration: say so and offer the snack that evens it out.
+  const surplus = useMemo(() => {
+    const over = dayTotals.kcal - calories;
+    if (!dayMenu.some(m => m.swapped) || over < Math.max(100, calories * 0.05)) return null;
+    const fix = dayMenu
+      .filter(m => !m.removed && SNACK_LIKE.includes(m.dish.mealType) && dayTotals.kcal - m.dish.macros.calories >= calories * 0.9)
+      .sort((a, b) => Math.abs(over - a.dish.macros.calories) - Math.abs(over - b.dish.macros.calories))[0];
+    return { over, fix };
+  }, [dayMenu, dayTotals.kcal, calories]);
+  // What the whole week really delivers (the day totals above are one day): the real gap to the customer's need.
+  const week = useMemo(() => {
+    if (!menuReady || !menuDates.length) return null;
+    const sum = { kcal: 0, p: 0, f: 0, c: 0 };
+    menuDates.forEach(d => {
+      effectiveMenu(d).filter(m => !m.removed).forEach(m => {
+        sum.kcal += m.dish.macros.calories; sum.p += m.dish.macros.protein; sum.f += m.dish.macros.fat; sum.c += m.dish.macros.carbs;
+      });
+    });
+    const n = menuDates.length;
+    const avg = { kcal: Math.round(sum.kcal / n), p: Math.round(sum.p / n), f: Math.round(sum.f / n), c: Math.round(sum.c / n) };
+    const need = calc?.maintain ?? 0;
+    const delta = need ? avg.kcal - need : 0;
+    const pct = need ? Math.round((delta / need) * 100) : 0;
+    // too deep a deficit (over 25% of the need) or, for "keep weight", more than 10% either way
+    const tooLow = Boolean(need) && (goal === 'maintain' ? pct < -10 : pct < -25);
+    const tooHigh = Boolean(need) && (goal === 'maintain' ? pct > 10 : goal === 'lose' && pct > 0);
+    // the week is on target: calories 3% under .. 5% over the ration, and (with a macro goal) protein not short
+    const onTarget = calories > 0 && avg.kcal >= calories * 0.97 && avg.kcal <= calories * 1.05 && (!macroGoal || avg.p >= macroGoal.protein * 0.93);
+    return { avg, need, delta, pct, tooLow, tooHigh, onTarget };
+  }, [menuReady, menuDates, effectiveMenu, calc, goal, calories, macroGoal]);
+  // protein is judged over the week (one light day is made up on the next ones)
+  const proteinShort = macroGoal && week && week.avg.p < macroGoal.protein * 0.9 ? Math.round(macroGoal.protein - week.avg.p) : 0;
 
   const swapCount = Object.keys(swaps).filter(k => menuDates.some(d => k.startsWith(dayKey(d)))).length;
   const phoneOk = phone.replace(/\D/g, '').length >= 9;
@@ -260,7 +304,7 @@ export function OrderExperience() {
       const [date, , baseId] = k.split('|');
       const base = dishes.find(d => d.id === baseId);
       const dish = dishes.find(d => d.id === dishId);
-      return `${date} ${base?.name.ru ?? baseId} → ${dish?.name.ru ?? dishId}`;
+      return `${date} ${base?.name.ru ?? baseId} → ${dishId === REMOVED ? 'убрать (без замены)' : dish?.name.ru ?? dishId}`;
     });
 
     // The server stores the order, calculates the price, notifies the team and (for online payment) creates the card link.
@@ -282,7 +326,7 @@ export function OrderExperience() {
           slot: slotLabel,
           stopList: [],
           swaps: swapNotes,
-          comment: comment.trim(),
+          comment: [macroGoal ? formatMacroGoal(macroGoal) : '', comment.trim()].filter(Boolean).join(' | '),
           payment: pay,
           gymId: pay === 'gym' ? gymId : undefined,
           language: l,
@@ -300,6 +344,7 @@ export function OrderExperience() {
     // Kitchen client card (what the kitchen tablet and couriers work from).
     const notes = [
       `🕗 ${slotLabel}`,
+      macroGoal ? formatMacroGoal(macroGoal) : '',
       swapNotes.length ? `Замены: ${swapNotes.join('; ')}` : '',
       comment.trim(),
     ].filter(Boolean).join(' | ');
@@ -611,7 +656,20 @@ export function OrderExperience() {
                     </div>
                     {dayMenu.length === 0 && <p className="ord-note">{T.menuEmpty[l]}</p>}
                     <div className="ord-meals">
-                      {dayMenu.map(({ key, baseId, dish, swapped }, i) => {
+                      {dayMenu.map(({ key, baseId, dish, swapped, removed }, i) => {
+                        if (removed) {
+                          return (
+                            <article key={key + 'x'} className="ord-meal removed">
+                              <div className="ord-meal-body">
+                                <span className="ord-meal-kind">{T.mealName[dish.mealType]?.[l] ?? dish.mealType} · {T.removedLabel[l]}</span>
+                                <h4>{dish.name[l]}</h4>
+                                <button type="button" className="ord-swap" onClick={() => setSwaps(p => { const n = { ...p }; delete n[key]; return n; })}>
+                                  <Repeat size={15} /> {T.restoreDish[l]}
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        }
                         const has = allergensOf(dish);
                         return (
                           <article key={key + dish.id} className="ord-meal" style={{ animationDelay: `${i * 50}ms` }}>
@@ -650,10 +708,19 @@ export function OrderExperience() {
                         <span>{meals} {mealsWord(meals, l)}</span>
                       </div>
                       <div className="ord-daytotal-grid">
-                        <div><strong>{dayTotals.kcal}</strong><small>{T.kcal[l]}</small></div>
-                        <div><strong>{Math.round(dayTotals.p)}</strong><small>{T.protein[l]}</small></div>
-                        <div><strong>{Math.round(dayTotals.f)}</strong><small>{T.fat[l]}</small></div>
-                        <div><strong>{Math.round(dayTotals.c)}</strong><small>{T.carbs[l]}</small></div>
+                        {[
+                          // green = this number is on target (calories: 3% under .. 5% over; protein: not short; fat / carbs: within 15%)
+                          { v: dayTotals.kcal, label: T.kcal[l], want: calories, hit: calories > 0 && dayTotals.kcal >= calories * 0.97 && dayTotals.kcal <= calories * 1.05 },
+                          { v: Math.round(dayTotals.p), label: T.protein[l], want: macroGoal?.protein, hit: Boolean(macroGoal) && dayTotals.p >= macroGoal!.protein * 0.93 && dayTotals.p <= macroGoal!.protein * 1.3 },
+                          { v: Math.round(dayTotals.f), label: T.fat[l], want: macroGoal?.fat, hit: Boolean(macroGoal) && Math.abs(dayTotals.f - macroGoal!.fat) <= macroGoal!.fat * 0.15 },
+                          { v: Math.round(dayTotals.c), label: T.carbs[l], want: macroGoal?.carbs, hit: Boolean(macroGoal) && Math.abs(dayTotals.c - macroGoal!.carbs) <= macroGoal!.carbs * 0.15 },
+                        ].map(x => (
+                          <div key={x.label} className={x.hit ? 'hit' : ''}>
+                            <strong>{x.v}</strong>
+                            <small>{x.label}</small>
+                            {x.want ? <em>{T.goalWord[l]} {x.want}</em> : null}
+                          </div>
+                        ))}
                       </div>
                       <p>
                         {T.dayMenuNote[l]
@@ -661,7 +728,39 @@ export function OrderExperience() {
                           .replace('{sum}', String(dayTotals.kcal))
                           .replace('{diff}', `${diffPct > 0 ? '+' : ''}${diffPct}%`)}
                       </p>
-                      {Math.abs(diffPct) > 15 && <p className="ord-warn" style={{ marginTop: 6 }}><AlertTriangle size={14} /> {T.dayMenuOff[l]}</p>}
+                      {macroGoal && (
+                        <p className="ord-goalline">
+                          {T.macroGoalLine[l].replace('{p}', String(macroGoal.protein)).replace('{f}', String(macroGoal.fat)).replace('{c}', String(macroGoal.carbs))}
+                        </p>
+                      )}
+                      {week?.onTarget && <p className="ord-weekok"><Check size={15} strokeWidth={3} /> {T.weekOk[l]}</p>}
+                      {week && calc && (
+                        <p className="ord-goalline" style={{ color: 'var(--o-text)' }}>
+                          {T.weekAvg[l].replace('{kcal}', String(week.avg.kcal)).replace('{p}', String(week.avg.p)).replace('{f}', String(week.avg.f)).replace('{c}', String(week.avg.c))}
+                          <br />
+                          {T.weekVsNeed[l].replace('{need}', String(week.need)).replace('{delta}', `${week.delta > 0 ? '+' : ''}${week.delta}`).replace('{pct}', `${week.pct > 0 ? '+' : ''}${week.pct}`)}
+                        </p>
+                      )}
+                      {week?.tooLow && <p className="ord-warn" style={{ marginTop: 6 }}><AlertTriangle size={14} /> {T.deficitHigh[l]}</p>}
+                      {week?.tooHigh && <p className="ord-warn" style={{ marginTop: 6 }}><AlertTriangle size={14} /> {T.surplusWeek[l]}</p>}
+                      {proteinShort > 0 && <p className="ord-warn" style={{ marginTop: 6 }}><AlertTriangle size={14} /> {T.proteinLow[l].replace('{g}', String(proteinShort))}</p>}
+                      {surplus ? (
+                        <div className="ord-surplus" role="status">
+                          <span><b><AlertTriangle size={14} style={{ display: 'inline', marginRight: 4 }} />{T.surplus[l].replace('{kcal}', String(surplus.over)).replace('{ration}', String(calories))}</b></span>
+                          {surplus.fix ? (
+                            <>
+                              <span>{T.surplusFix[l].replace('{dish}', surplus.fix.dish.name[l]).replace('{kcal}', String(surplus.fix.dish.macros.calories))}</span>
+                              <button type="button" className="ord-swap on" onClick={() => setSwaps(p => ({ ...p, [surplus.fix!.key]: REMOVED }))}>
+                                {T.removeDish[l]}
+                              </button>
+                            </>
+                          ) : (
+                            <span>{T.surplusNoFix[l]}</span>
+                          )}
+                        </div>
+                      ) : (
+                        Math.abs(diffPct) > 15 && <p className="ord-warn" style={{ marginTop: 6 }}><AlertTriangle size={14} /> {T.dayMenuOff[l]}</p>
+                      )}
                     </div>
                   </>
                 )}

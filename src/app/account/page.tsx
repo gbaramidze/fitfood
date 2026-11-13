@@ -8,6 +8,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { normalizePhone } from '@/lib/phone';
 import { useRationDishes } from '@/lib/rationDishesService';
 import { buildMenu } from '@/lib/rationRotation';
+import { parseMacroGoal } from '@/lib/calorieCalc';
 import { mealsFor } from '@/lib/rationOptions';
 import { Locale } from '@/types';
 import { DishImage } from '@/components/order/DishImage';
@@ -89,6 +90,7 @@ interface OrderRow {
   payment_status: string;
   status: string;
   address: string;
+  comment?: string | null;
   created_at: string;
 }
 
@@ -218,7 +220,7 @@ export default function AccountPage() {
     const from = start > today ? start : today;
     const n = mealsFor(o.program_id, o.calories);
     const out: { date: Date; meals: ReturnType<typeof buildMenu> }[] = [];
-    for (let d = new Date(from); d <= end && out.length < 5; d = addDays(d, 1)) out.push({ date: new Date(d), meals: buildMenu(d, n, dishes, o.calories) });
+    for (let d = new Date(from); d <= end && out.length < 5; d = addDays(d, 1)) out.push({ date: new Date(d), meals: buildMenu(d, n, dishes, o.calories, parseMacroGoal(o.comment), start) });
     return out;
   }, [orders, dishes]);
 

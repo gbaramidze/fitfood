@@ -392,6 +392,56 @@ export const T = {
     'Блюда этого дня пока не дают точно калорийность рациона — расчёт уточнится по мере пополнения меню.',
     'The dishes of this day do not hit the ration calories exactly yet — it gets tighter as the menu grows.'
   ),
+  macroGoalLine: s(
+    'თქვენი მიზანი: ც {p} · ც {f} · ნ {c} გ',
+    'Ваша цель: Б {p} · Ж {f} · У {c} г',
+    'Your target: P {p} · F {f} · C {c} g'
+  ),
+  proteinLow: s(
+    'კვირის საშუალო ცილა მიზანზე {g} გ-ით ნაკლებია. ჩანაცვლებისას აირჩიე მეტი ცილის კერძი.',
+    'Белка в среднем за неделю на {g} г меньше вашей цели. При замене выбирайте блюдо с большим количеством белка.',
+    'Weekly average protein is {g} g under your target. When swapping, pick a dish with more protein.'
+  ),
+  surplus: s(
+    'კალორიების ჭარბი: ჩანაცვლების შემდეგ დღე {kcal} კკალ-ით აღემატება თქვენს რაციონს ({ration} კკალ).',
+    'Излишек калорий: после замен день на {kcal} ккал больше вашего рациона ({ration} ккал).',
+    'Calorie surplus: after the swaps the day is {kcal} kcal over your ration ({ration} kcal).'
+  ),
+  surplusFix: s(
+    'დასაბალანსებლად ამოიღე «{dish}» (−{kcal} კკალ).',
+    'Чтобы сбалансировать, уберите «{dish}» (−{kcal} ккал).',
+    'To balance it, drop “{dish}” (−{kcal} kcal).'
+  ),
+  surplusNoFix: s(
+    'აირჩიე უფრო მსუბუქი კერძი ან პატარა რაციონი.',
+    'Выберите блюдо полегче или рацион поменьше.',
+    'Pick a lighter dish or a smaller ration.'
+  ),
+  weekAvg: s(
+    'საშუალო კვირაში: {kcal} კკალ · ც {p} · ც {f} · ნ {c}',
+    'В среднем за неделю: {kcal} ккал · Б {p} · Ж {f} · У {c}',
+    'Weekly average: {kcal} kcal · P {p} · F {f} · C {c}'
+  ),
+  weekVsNeed: s(
+    'თქვენს ნორმასთან ({need} კკალ): {delta} კკალ ({pct}%)',
+    'К вашей норме ({need} ккал): {delta} ккал ({pct}%)',
+    'Versus your need ({need} kcal): {delta} kcal ({pct}%)'
+  ),
+  deficitHigh: s(
+    'რეალური დეფიციტი ძალიან დიდია. აირჩიე უფრო დიდი რაციონი ან უფრო კალორიული კერძები.',
+    'Реальный дефицит слишком большой. Выберите рацион крупнее или замените блюда на более калорийные.',
+    'The real deficit is too large. Pick a bigger ration or swap in more caloric dishes.'
+  ),
+  surplusWeek: s(
+    'კვირის საშუალო ნორმას აჭარბებს. აირჩიე უფრო პატარა რაციონი.',
+    'В среднем за неделю выходит заметно больше вашей нормы. Выберите рацион поменьше.',
+    'The weekly average is well above your need. Pick a smaller ration.'
+  ),
+  weekOk: s('კვირის საშუალო ნორმა დაცულია', 'Средняя недельная норма соблюдена', 'Weekly average is on target'),
+  goalWord: s('მიზანი', 'цель', 'goal'),
+  removeDish: s('ამოღება', 'Убрать', 'Remove'),
+  restoreDish: s('დაბრუნება', 'Вернуть', 'Restore'),
+  removedLabel: s('ამოღებულია', 'убрано', 'removed'),
   grams: s('გ', 'г', 'g'),
   portionNote: s(
     'პორციები მორგებულია თქვენს {kcal} კკალ-ზე (×{k}). სტანდარტული პორციებით: {base} კკალ.',
