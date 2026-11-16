@@ -54,9 +54,12 @@ export function isFeasible(meals: number, pool: Dish[]): boolean {
 
 /**
  * Can the ration be sold honestly? Every slot must be fillable AND real portions must land near the
- * ration's calories: over a sample week the average miss may not exceed 20% (e.g. 3000 kcal from
+ * ration's calories: over a sample week the average miss may not exceed 10% (e.g. 3000 kcal from
  * 400-kcal dishes never gets there, so it stays "in the works" until bigger dishes are added).
  */
+/** A ration is offered only if a sample week stays within this share of its calories on average. */
+const MAX_AVG_MISS = 0.1;
+
 export function isViable(meals: number, targetKcal: number, pool: Dish[]): boolean {
   if (!isFeasible(meals, pool)) return false;
   let miss = 0;
@@ -64,7 +67,7 @@ export function isViable(meals: number, targetKcal: number, pool: Dish[]): boole
     const kcal = buildMenu(new Date(2024, 0, 1 + d), meals, pool, targetKcal).reduce((a, m) => a + m.dish.macros.calories, 0);
     miss += Math.abs(kcal - targetKcal) / targetKcal;
   }
-  return miss / 7 <= 0.2;
+  return miss / 7 <= MAX_AVG_MISS;
 }
 
 export interface MenuItem {

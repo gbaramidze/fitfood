@@ -19,6 +19,7 @@ import {
 } from '@/data/partnerData';
 import { partnerDbService, sortPartnerProducts } from '@/services/partnerDbService';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { calcPartnerDiscount, calcPreorderDiscount, isDrinkCategory } from '@/lib/partnerDiscount';
 
 interface CreatePreorderParams {
   pointId: string;
@@ -52,7 +53,7 @@ interface CompleteSaleParams {
   items: { product: PartnerProduct; quantity: number }[];
   paymentMethod: 'card' | 'cash' | 'split' | 'free';
   splitDetails?: { cashAmount: number; cardAmount: number };
-  discountType?: 'none' | 'percent50' | 'free' | 'fixed4';
+  discountType?: 'none' | 'partner' | 'preorder' | 'percent50' | 'free' | 'fixed4';
   discountComment?: string;
   notes?: string;
 }
@@ -62,7 +63,7 @@ export interface EditSaleParams {
   paymentMethod?: 'card' | 'cash' | 'split' | 'free';
   splitDetails?: { cashAmount: number; cardAmount: number };
   items?: { productId: string; productName: string; quantity: number; pricePerUnit: number; totalPrice: number }[];
-  discountType?: 'none' | 'percent50' | 'free' | 'fixed4';
+  discountType?: 'none' | 'partner' | 'preorder' | 'percent50' | 'free' | 'fixed4';
   discountComment?: string;
   totalAmount?: number;
   notes?: string;
@@ -97,7 +98,7 @@ interface PartnerContextType {
   createWriteOff: (pointId: string, productId: string, quantity: number, reason: 'expired' | 'damaged' | 'sample' | 'other', note?: string) => boolean;
   notifyWriteOffBatch: (pointId: string, items: { productName: string; quantity: number; totalValue?: number }[], reasonText: string, note?: string) => void;
 
-  // Preorder actions (paid in advance with -50%, not deducted from stock until fulfilled)
+  // Preorder actions (paid in advance with -3 ₾ per dish, not deducted from stock until fulfilled)
   createPreorder: (params: CreatePreorderParams) => PartnerPreorder;
   editPreorder: (params: EditPreorderParams) => boolean;
   fulfillPreorder: (preorderId: string) => boolean;
@@ -391,8 +392,17 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const totalUnitsCount = saleItems.reduce((sum, item) => sum + item.quantity, 0);
 
     let discountAmount = 0;
-    if (discountType === 'percent50') {
-      // 50% discount on total original amount
+    if (discountType === 'partner') {
+      // Partner rule on regular sales: -50% on drinks only (dish -3 ₾ applies to preorders)
+      discountAmount = calcPartnerDiscount(
+        items.map(item => ({
+          unitPrice: item.product.price,
+          quantity: item.quantity,
+          isDrink: isDrinkCategory(item.product.category),
+        }))
+      ).total;
+    } else if (discountType === 'percent50') {
+      // Legacy: 50% discount on total original amount
       discountAmount = Math.round((originalAmount * 0.5) * 100) / 100;
     } else if (discountType === 'fixed4') {
       // Legacy 4 GEL discount on EACH item in the receipt
@@ -530,7 +540,19 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const totalUnitsCount = finalItems.reduce((sum, it) => sum + it.quantity, 0);
 
           let discountAmount = 0;
-          if (finalDiscountType === 'percent50') {
+          if (finalDiscountType === 'partner') {
+            discountAmount = calcPartnerDiscount(
+              finalItems.map(it => ({
+                unitPrice: it.pricePerUnit,
+                quantity: it.quantity,
+                isDrink: isDrinkCategory(products.find(p => p.id === it.productId)?.category),
+              }))
+            ).total;
+          } else if (finalDiscountType === 'preorder') {
+            discountAmount = calcPreorderDiscount(
+              finalItems.map(it => ({ unitPrice: it.pricePerUnit, quantity: it.quantity }))
+            );
+          } else if (finalDiscountType === 'percent50') {
             discountAmount = Math.round((originalAmount * 0.5) * 100) / 100;
           } else if (finalDiscountType === 'fixed4') {
             discountAmount = Math.min(originalAmount, 4 * totalUnitsCount);
@@ -716,7 +738,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Create a preorder: customer reserves dishes & pays 50% upfront. Stock is NOT touched yet —
+  // Create a preorder: customer reserves dishes & pays upfront with -3 ₾ per dish. Stock is NOT touched yet —
   // it is only deducted once the preorder is fulfilled (picked up) via fulfillPreorder().
   const createPreorder = ({
     pointId,
@@ -734,7 +756,9 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
 
     const originalAmount = preorderItems.reduce((sum, item) => sum + item.totalPrice, 0);
-    const discountAmount = Math.round((originalAmount * 0.5) * 100) / 100;
+    const discountAmount = calcPreorderDiscount(
+      preorderItems.map(it => ({ unitPrice: it.pricePerUnit, quantity: it.quantity }))
+    );
     const totalAmount = Math.max(0, originalAmount - discountAmount);
     const preorderId = `preorder-${Date.now()}`;
     const preorderNumber = `PRE-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -752,7 +776,7 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
       items: preorderItems,
       originalAmount,
       discountAmount,
-      discountType: 'percent50',
+      discountType: 'preorder',
       discountComment: `📝 წინასწარი შეკვეთის ავანსი • ${comment.trim()}`,
       totalAmount,
       paymentMethod,
@@ -915,7 +939,9 @@ export const PartnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
       : target.items;
 
     const originalAmount = newItems.reduce((sum, it) => sum + it.totalPrice, 0);
-    const discountAmount = Math.round((originalAmount * 0.5) * 100) / 100;
+    const discountAmount = calcPreorderDiscount(
+      newItems.map(it => ({ unitPrice: it.pricePerUnit, quantity: it.quantity }))
+    );
     const totalAmount = Math.max(0, originalAmount - discountAmount);
     const finalComment = comment !== undefined ? comment.trim() : target.comment;
     const finalPickupDate = pickupDate && pickupDate >= getTbilisiDateStr(1) ? pickupDate : target.pickupDate;

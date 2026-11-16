@@ -66,8 +66,10 @@ export interface PartnerSale {
   receiptNumber: string;
   items: PartnerSaleItem[];
   originalAmount: number; // before discount
-  discountAmount: number; // e.g. 50% or full price
-  discountType: 'none' | 'percent50' | 'free' | 'fixed4';
+  discountAmount: number; // partner (-50% drinks), preorder (-3 ₾/dish), full price, or legacy
+  // 'partner' = -50% on drinks (regular sale), 'preorder' = -3 ₾ per dish (preorder advance receipt).
+  // 'percent50' / 'fixed4' are legacy, kept so old receipts stay valid.
+  discountType: 'none' | 'partner' | 'preorder' | 'percent50' | 'free' | 'fixed4';
   discountComment?: string;
   totalAmount: number;
   paymentMethod: 'card' | 'cash' | 'split' | 'free';

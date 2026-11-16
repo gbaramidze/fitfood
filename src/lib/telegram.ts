@@ -168,7 +168,7 @@ export function formatPreorderNotification(preorder: {
 📦 <b>პოზიციები:</b>
 ${itemsList}
 
-🏷️ <b>ფასდაკლება -50%:</b> -${formatAmount(preorder.discountAmount || 0)} ₾
+🏷️ <b>ფასდაკლება (კერძი -3 ₾):</b> -${formatAmount(preorder.discountAmount || 0)} ₾
 ━━━━━━━━━━━━━━━━━━━━━
 <b>გადახდილი ავანსად:</b> ${preorder.totalAmount.toFixed(2)} ₾
 ${paymentMethodLabel}

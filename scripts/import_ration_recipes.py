@@ -51,7 +51,40 @@ WANTED = {
     'salad-shrimp': 'სალათი კრევეტით',
     'trifle-brownie': 'ტრაიფლ ბრაუნი',
     'cheesecake': 'ჩიზქეიქი',
+    # third batch (chat 06.11 - 15.11); a stem starting with "=" must equal the whole dish name
+    'goulash-pasta': 'გულაში მაკარონით',
+    'chicken-schnitzel-rice': 'ქათმის შნიცელი',
+    'french-style-beef': 'ხორცი ფრანგულად',
+    'chicken-burger': 'ბურგერი ქათმით',
+    'crepes-banana': 'ბლინები ბანანითა',
+    'crepe-chicken-mushroom': 'ბლინი ქათმითა',
+    'noodle-soup': 'ლაფშის სუპი',
+    'stuffed-pepper-julienne': 'ჟულიენით შევსებული წიწაკა',
+    'chicken-meatballs-spaghetti': 'ქათმის თეფტელები',
+    'chicken-zharkoe': 'ქათმის ჟარკოე',
+    'beef-azu': 'აზუ საქონლის',
+    'rice-porridge': 'ბრინჯის ფაფა',
+    'chicken-sandwich': 'სენდვიჩი ქათმით',
+    'oat-crepe': 'ტკბილი შვრიის ბლინი',
+    'fruit-salad-yogurt': 'ხილის სალათი',
+    'chicken-salad': 'სალათი ქათმით',
+    'baked-chicken-tomato-cream': 'გამომცხვარი ქათმის მკერდი',
+    'potato-slices-mince': 'კარტოფილის სლაისები',
+    'meatballs-puree': 'მითბოლები',
+    'mushroom-cream-soup': 'სოკოს კრემ-სუპი',
+    'chicken-quesadilla': 'ქესადილა',
+    'protein-waffles': '=ცილოვანი ვაფლი',
+    'chocolate-protein-waffles': 'შოკოლადის ცილოვანი ვაფლი',
+    'tuna-sandwich': 'სენდვიჩი თინუსით',
+    'salmon-sandwich': 'სენდვიჩი ორაგულით',
+    'crab-roll': 'კრაბის ჯოხების რულეტი',
 }
+
+
+def num(v):
+    """grams: whole numbers stay integers, halves (5.5) are kept"""
+    f = float(v)
+    return int(f) if f.is_integer() else round(f, 1)
 
 
 def lines(cell):
@@ -67,7 +100,7 @@ def main():
 
     out = {}
     for key, stem in WANTED.items():
-        hits = [r for r in rows if r[2] and stem in str(r[2])]
+        hits = [r for r in rows if r[2] and ((str(r[2]).strip() == stem[1:]) if stem.startswith('=') else (stem in str(r[2])))]
         if len(hits) != 1:
             sys.exit(f'"{key}": stem "{stem}" matched {len(hits)} rows (need exactly 1)')
         r = hits[0]
@@ -77,9 +110,9 @@ def main():
             'ingredientLines': lines(r[3]),
             'methodLines': lines(r[4]),
             'calories': round(float(r[5])),
-            'protein': round(float(r[6])),
-            'fat': round(float(r[7])),
-            'carbs': round(float(r[8])),
+            'protein': num(r[6]),
+            'fat': num(r[7]),
+            'carbs': num(r[8]),
         }
 
     dest = os.path.join(os.path.dirname(__file__), '..', 'src', 'data', 'rationRecipes.json')

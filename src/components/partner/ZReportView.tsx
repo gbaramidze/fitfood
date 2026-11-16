@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { usePartner } from '@/context/PartnerContext';
 import { PartnerProduct, PartnerSale, PartnerSaleItem } from '@/types/partner';
 import { IconTrash } from '@/components/Icons';
+import { calcPartnerDiscount, calcPreorderDiscount, isDrinkCategory } from '@/lib/partnerDiscount';
 import {
   Globe, MapPin, Printer, Package, ClipboardList, Drumstick, Beef, Fish, Croissant,
   Salad, Soup, CakeSlice, CupSoda, CreditCard, Banknote, Gift, Tag, Shuffle, Check,
@@ -27,7 +28,7 @@ export const ZReportView: React.FC = () => {
   const [editPaymentMethod, setEditPaymentMethod] = useState<'card' | 'cash' | 'split' | 'free'>('card');
   const [editSplitCash, setEditSplitCash] = useState<string>('10');
   const [editItems, setEditItems] = useState<PartnerSaleItem[]>([]);
-  const [editDiscountType, setEditDiscountType] = useState<'none' | 'percent50' | 'free' | 'fixed4'>('none');
+  const [editDiscountType, setEditDiscountType] = useState<'none' | 'partner' | 'preorder' | 'percent50' | 'free' | 'fixed4'>('none');
   const [editDiscountComment, setEditDiscountComment] = useState<string>('');
   const [editCustomTotal, setEditCustomTotal] = useState<string>('');
   const [editNotes, setEditNotes] = useState<string>('');
@@ -77,13 +78,13 @@ export const ZReportView: React.FC = () => {
     .reduce((sum, s) => sum + s.items.reduce((iSum, it) => iSum + it.quantity, 0), 0);
 
   const totalDiscountsGiven = activeSales
-    .filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4')
+    .filter(s => s.discountType === 'partner' || s.discountType === 'preorder' || s.discountType === 'percent50' || s.discountType === 'fixed4')
     .reduce((sum, s) => sum + s.discountAmount, 0);
 
   const filteredDaySales = daySales.filter(sale => {
     const isFree = sale.paymentMethod === 'free' || sale.discountType === 'free' || sale.totalAmount === 0;
     if (filterPaymentType === 'free') return isFree;
-    if (filterPaymentType === 'discount') return sale.discountType === 'percent50' || sale.discountType === 'fixed4';
+    if (filterPaymentType === 'discount') return sale.discountType === 'partner' || sale.discountType === 'preorder' || sale.discountType === 'percent50' || sale.discountType === 'fixed4';
     if (isFree) return false;
     if (filterPaymentType === 'card' && sale.paymentMethod !== 'card') return false;
     if (filterPaymentType === 'cash' && sale.paymentMethod !== 'cash') return false;
@@ -231,8 +232,21 @@ export const ZReportView: React.FC = () => {
   // Calculate live edited totals
   const editSubtotal = editItems.reduce((sum, it) => sum + it.pricePerUnit * it.quantity, 0);
   const editTotalQty = editItems.reduce((sum, it) => sum + it.quantity, 0);
+  const editPartnerDiscount = calcPartnerDiscount(
+    editItems.map(it => ({
+      unitPrice: it.pricePerUnit,
+      quantity: it.quantity,
+      isDrink: isDrinkCategory(products.find(p => p.id === it.productId)?.category),
+    }))
+  );
   let editDiscountAmt = 0;
-  if (editDiscountType === 'percent50') {
+  if (editDiscountType === 'partner') {
+    editDiscountAmt = editPartnerDiscount.total;
+  } else if (editDiscountType === 'preorder') {
+    editDiscountAmt = calcPreorderDiscount(
+      editItems.map(it => ({ unitPrice: it.pricePerUnit, quantity: it.quantity }))
+    );
+  } else if (editDiscountType === 'percent50') {
     editDiscountAmt = Math.round((editSubtotal * 0.5) * 100) / 100;
   } else if (editDiscountType === 'fixed4') {
     editDiscountAmt = Math.min(editSubtotal, 4 * editTotalQty);
@@ -689,7 +703,7 @@ export const ZReportView: React.FC = () => {
               className={`disc-pill ${filterPaymentType === 'discount' ? 'active' : ''}`}
               style={{ fontSize: '11.5px', padding: '4px 10px' }}
             >
-              <Tag size={12} /> ფასდაკლებით ({daySales.filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4').length})
+              <Tag size={12} /> ფასდაკლებით ({daySales.filter(s => s.discountType === 'partner' || s.discountType === 'preorder' || s.discountType === 'percent50' || s.discountType === 'fixed4').length})
             </button>
           </div>
         </div>
@@ -974,13 +988,26 @@ export const ZReportView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setEditDiscountType('percent50');
+                    setEditDiscountType('partner');
                     if (editPaymentMethod === 'free') setEditPaymentMethod('card');
                   }}
-                  className={`disc-pill ${editDiscountType === 'percent50' ? 'active' : ''}`}
+                  className={`disc-pill ${editDiscountType === 'partner' ? 'active' : ''}`}
                 >
-                  -50% ფასდაკლება (-{(editSubtotal * 0.5).toFixed(2)} ₾)
+                  პარტნიორის ფასდაკლება: სასმელი -50% (-{editPartnerDiscount.total.toFixed(2)} ₾)
                 </button>
+                {/* Legacy receipts (old -50% / -4 ₾ rules) keep their original discount until switched */}
+                {(editingSale?.discountType === 'preorder' || editingSale?.discountType === 'percent50' || editingSale?.discountType === 'fixed4') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditDiscountType(editingSale.discountType);
+                      if (editPaymentMethod === 'free') setEditPaymentMethod('card');
+                    }}
+                    className={`disc-pill ${editDiscountType === editingSale.discountType ? 'active' : ''}`}
+                  >
+                    {editingSale.discountType === 'preorder' ? 'წინასწარი შეკვეთა: კერძი -3 ₾' : editingSale.discountType === 'percent50' ? 'ძველი -50%' : 'ძველი -4 ₾/პოზ.'} (-{editDiscountType === editingSale.discountType ? editDiscountAmt.toFixed(2) : editingSale.discountAmount.toFixed(2)} ₾)
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

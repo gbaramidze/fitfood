@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { usePartner } from '@/context/PartnerContext';
 import { PartnerProduct, PartnerPreorder } from '@/types/partner';
 import { IconClose, IconTrash } from '@/components/Icons';
+import { calcPreorderDiscount } from '@/lib/partnerDiscount';
 import { ClipboardList, Calendar, CreditCard, Banknote, Check, Pencil, X, Trash2, Save } from 'lucide-react';
 
 export const PreorderView: React.FC = () => {
@@ -107,7 +108,9 @@ export const PreorderView: React.FC = () => {
   };
 
   const editSubtotal = editItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const editDiscount = Math.round((editSubtotal * 0.5) * 100) / 100;
+  const editDiscount = calcPreorderDiscount(
+    editItems.map(item => ({ unitPrice: item.product.price, quantity: item.quantity }))
+  );
   const editFinalTotal = Math.max(0, editSubtotal - editDiscount);
 
   const handleSaveEditPreorder = () => {
@@ -469,7 +472,7 @@ export const PreorderView: React.FC = () => {
               }}
             >
               <div>
-                <span style={{ fontSize: '13px', color: '#94A3B8' }}>ავანსად გადასახდელი (-50%):</span>
+                <span style={{ fontSize: '13px', color: '#94A3B8' }}>გადასახდელი (კერძი -3 ₾):</span>
                 <div style={{ fontSize: '11px', color: '#64748B' }}>სრული ფასი: {editSubtotal.toFixed(2)} ₾</div>
               </div>
               <strong style={{ fontSize: '20px', color: '#EC4899' }}>{editFinalTotal.toFixed(2)} ₾</strong>

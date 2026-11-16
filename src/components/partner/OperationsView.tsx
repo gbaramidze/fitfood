@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { usePartner } from '@/context/PartnerContext';
 import { PartnerProduct, PartnerSale, PartnerPreorder } from '@/types/partner';
 import { IconTrash } from '@/components/Icons';
+import { calcPartnerDiscount, calcPreorderDiscount, isDrinkCategory } from '@/lib/partnerDiscount';
 import { LazyProductImage } from '@/components/partner/LazyProductImage';
 import {
   ShoppingCart, NotebookPen, Trash2, Package, Search, CreditCard, Banknote,
@@ -50,7 +51,7 @@ export const OperationsView: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'cash' | 'split' | 'free'>('card');
   const [splitCash, setSplitCash] = useState<string>('10');
   const [cashGiven, setCashGiven] = useState<string>('');
-  const [discountType, setDiscountType] = useState<'none' | 'percent50'>('none');
+  const [discountType, setDiscountType] = useState<'none' | 'partner'>('none');
   const [discountComment, setDiscountComment] = useState<string>('');
   const [toastSale, setToastSale] = useState<PartnerSale | null>(null);
 
@@ -217,12 +218,21 @@ export const OperationsView: React.FC = () => {
   const totalQuantity = cart.reduce((sum, item) => sum + item.quantity, 0);
   const rawSubtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
+  // Partner discount on regular sales: -50% on drinks only (dishes: no discount; -3 ₾ is preorder-only)
+  const partnerDiscount = calcPartnerDiscount(
+    cart.map(item => ({
+      unitPrice: item.product.price,
+      quantity: item.quantity,
+      isDrink: isDrinkCategory(item.product.category),
+    }))
+  );
+
   // Sale totals
   const isFreePayment = paymentMethod === 'free';
   const effectiveDiscountType = isFreePayment ? 'free' : discountType;
   let discountDeduction = 0;
-  if (effectiveDiscountType === 'percent50') {
-    discountDeduction = Math.round((rawSubtotal * 0.5) * 100) / 100;
+  if (effectiveDiscountType === 'partner') {
+    discountDeduction = partnerDiscount.total;
   } else if (effectiveDiscountType === 'free') {
     discountDeduction = rawSubtotal;
   }
@@ -232,8 +242,10 @@ export const OperationsView: React.FC = () => {
   const cashAmountNum = parseFloat(cashGiven) || 0;
   const change = Math.max(0, cashAmountNum - finalTotal);
 
-  // Preorder totals: paid 50% in advance
-  const preorderDiscount = Math.round((rawSubtotal * 0.5) * 100) / 100;
+  // Preorder totals: -3 ₾ per dish
+  const preorderDiscount = calcPreorderDiscount(
+    cart.map(item => ({ unitPrice: item.product.price, quantity: item.quantity }))
+  );
   const preorderTotal = Math.max(0, rawSubtotal - preorderDiscount);
 
   const handleSale = () => {
@@ -245,8 +257,8 @@ export const OperationsView: React.FC = () => {
       alert('გთხოვთ მიუთითოთ ვისთვის არის უფასო რაციონი (მწვრთნელი, ხელმძღვანელობა და ა.შ.)');
       return;
     }
-    if (!isFree && discountType === 'percent50' && !discountComment.trim()) {
-      alert('გთხოვთ მიუთითოთ ვისთვის არის -50% ფასდაკლება (მაგალითად: მწვრთნელი, თანამშრომელი, აქცია)');
+    if (!isFree && discountType === 'partner' && !discountComment.trim()) {
+      alert('გთხოვთ მიუთითოთ ვისთვის არის პარტნიორის ფასდაკლება (მაგალითად: მწვრთნელი, თანამშრომელი, აქცია)');
       return;
     }
     if (paymentMethod === 'cash' && cashGiven && cashAmountNum < finalTotal) {
@@ -517,18 +529,18 @@ export const OperationsView: React.FC = () => {
                   <div className="discount-pills">
                     <button
                       type="button"
-                      onClick={() => setDiscountType(prev => prev === 'percent50' ? 'none' : 'percent50')}
-                      className={`disc-pill ${discountType === 'percent50' ? 'active' : ''}`}
+                      onClick={() => setDiscountType(prev => prev === 'partner' ? 'none' : 'partner')}
+                      className={`disc-pill ${discountType === 'partner' ? 'active' : ''}`}
                     >
-                      <Tag size={13} /> -50% ფასდაკლება (-{(rawSubtotal * 0.5).toFixed(2)} ₾)
+                      <Tag size={13} /> პარტნიორის ფასდაკლება: სასმელი -50% (-{partnerDiscount.total.toFixed(2)} ₾)
                     </button>
                   </div>
-                  {discountType === 'percent50' && (
+                  {discountType === 'partner' && (
                     <div className="discount-comment-wrap">
                       <input
                         type="text"
                         required
-                        placeholder={`ვისთვის არის -50% ფასდაკლება (-${(rawSubtotal * 0.5).toFixed(2)} ₾)...`}
+                        placeholder={`ვისთვის არის ფასდაკლება (-${partnerDiscount.total.toFixed(2)} ₾)...`}
                         value={discountComment}
                         onChange={e => setDiscountComment(e.target.value)}
                         className="discount-comment-input"
@@ -565,8 +577,8 @@ export const OperationsView: React.FC = () => {
                   <span>{totalQuantity} პოზ.</span>
                   {paymentMethod === 'free' ? (
                     <span className="disc-applied-tag" style={{ color: '#A855F7', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>(<Gift size={11} /> უფასო)</span>
-                  ) : discountType === 'percent50' ? (
-                    <span className="disc-applied-tag">(-50%: -{(rawSubtotal * 0.5).toFixed(2)} ₾)</span>
+                  ) : discountType === 'partner' ? (
+                    <span className="disc-applied-tag">(სასმელი -50%: -{partnerDiscount.drinkDiscount.toFixed(2)} ₾)</span>
                   ) : null}
                 </div>
                 <div className="total-val">
@@ -681,12 +693,12 @@ export const OperationsView: React.FC = () => {
               <div className="pos-min-totals">
                 <div>
                   <span>{totalQuantity} პოზ.</span>
-                  <span className="disc-applied-tag">(-50%: -{preorderDiscount.toFixed(2)} ₾)</span>
+                  <span className="disc-applied-tag">(კერძი -3 ₾: -{preorderDiscount.toFixed(2)} ₾)</span>
                 </div>
                 <div className="total-val">{preorderTotal.toFixed(2)} <small>₾</small></div>
               </div>
               <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '-6px', marginBottom: '6px' }}>
-                სრული ფასი: {rawSubtotal.toFixed(2)} ₾ · ავანსად გადასახდელი (-50%): <strong style={{ color: '#EC4899' }}>{preorderTotal.toFixed(2)} ₾</strong>
+                სრული ფასი: {rawSubtotal.toFixed(2)} ₾ · გადასახდელი (კერძი -3 ₾): <strong style={{ color: '#EC4899' }}>{preorderTotal.toFixed(2)} ₾</strong>
               </div>
 
               <button onClick={handlePreorder} className="pos-min-charge-btn" style={{ background: '#EC4899' }}>

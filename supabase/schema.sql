@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS partner_sales (
   items JSONB NOT NULL,                -- [{productId, productName, quantity, pricePerUnit, totalPrice}]
   original_amount NUMERIC(10, 2) NOT NULL,
   discount_amount NUMERIC(10, 2) DEFAULT 0,
-  discount_type TEXT NOT NULL DEFAULT 'none', -- 'none' | 'fixed4' | 'free'
+  discount_type TEXT NOT NULL DEFAULT 'none', -- 'none' | 'partner' | 'free' (legacy: 'percent50' | 'fixed4')
   discount_comment TEXT,
   total_amount NUMERIC(10, 2) NOT NULL,
   payment_method TEXT NOT NULL,        -- 'card' | 'cash' | 'split'

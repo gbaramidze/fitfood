@@ -31,7 +31,7 @@ export const ReceiptsHistoryView: React.FC = () => {
   const filteredSales = pointTodaySales.filter(sale => {
     const isFree = sale.paymentMethod === 'free' || sale.discountType === 'free' || sale.totalAmount === 0;
     if (filterType === 'free') return isFree;
-    if (filterType === 'discount') return sale.discountType === 'percent50' || sale.discountType === 'fixed4';
+    if (filterType === 'discount') return sale.discountType === 'partner' || sale.discountType === 'preorder' || sale.discountType === 'percent50' || sale.discountType === 'fixed4';
     if (isFree) return false;
     if (filterType === 'card' && sale.paymentMethod !== 'card') return false;
     if (filterType === 'cash' && sale.paymentMethod !== 'cash') return false;
@@ -68,7 +68,7 @@ export const ReceiptsHistoryView: React.FC = () => {
     .reduce((sum, s) => sum + s.items.reduce((iSum, it) => iSum + it.quantity, 0), 0);
 
   const totalDiscountsGiven = activeSales
-    .filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4')
+    .filter(s => s.discountType === 'partner' || s.discountType === 'preorder' || s.discountType === 'percent50' || s.discountType === 'fixed4')
     .reduce((sum, s) => sum + s.discountAmount, 0);
 
   const handlePerformRefund = (sale: PartnerSale) => {
@@ -307,7 +307,7 @@ export const ReceiptsHistoryView: React.FC = () => {
             cursor: 'pointer'
           }}
         >
-          <Tag size={13} /> ფასდაკლებით ({pointTodaySales.filter(s => s.discountType === 'percent50' || s.discountType === 'fixed4').length})
+          <Tag size={13} /> ფასდაკლებით ({pointTodaySales.filter(s => s.discountType === 'partner' || s.discountType === 'preorder' || s.discountType === 'percent50' || s.discountType === 'fixed4').length})
         </button>
       </div>
 
