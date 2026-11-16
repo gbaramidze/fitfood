@@ -16,7 +16,7 @@ export const CALORIE_LEVELS: CalorieOption[] = [
   { cal: 1800, meals: 5 },
   { cal: 2200, meals: 6 },
   { cal: 2500, meals: 6 },
-  { cal: 3000, meals: 6 },
+  { cal: 3000, meals: 7 },
 ];
 
 /** The levels currently offered (the site additionally hides any the menu cannot serve). */

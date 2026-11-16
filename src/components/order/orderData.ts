@@ -24,14 +24,17 @@ export const COST_MAIN_LOADED = 13;
 export const COST_SNACK_LOADED = 5.5;
 
 /** Mains are always breakfast + lunch + dinner; every meal above 3 is a snack, salad or dessert. */
-const split = (meals: number) => ({ mains: 3, snacks: Math.max(0, meals - 3) });
+const split = (meals: number) => {
+  if (meals >= 7) return { mains: 3 + (meals - 6), snacks: 3 }; // 7 meals = a second main dish, still 3 snacks
+  return { mains: 3, snacks: Math.max(0, meals - 3) };
+};
 
 /**
  * More calories = bigger, pricier dishes, so the price follows the calories a little within the same number of meals.
  * REF_KCAL is the level where the base price above applies; ELASTICITY says how much of the calorie difference is
  * charged (0.35: 10% more calories -> 3.5% higher price).
  */
-const REF_KCAL: Record<number, number> = { 3: 1000, 4: 1250, 5: 1800, 6: 2500 };
+const REF_KCAL: Record<number, number> = { 3: 1000, 4: 1250, 5: 1800, 6: 2500, 7: 3000 };
 const ELASTICITY = 0.35;
 /** A ration is never sold below its loaded cost + this margin, whatever the discount. */
 const MIN_MARGIN = 0.05;
@@ -46,7 +49,7 @@ export function dayCost(meals: number) {
 const perDay = (meals: number, kcal: number, days: number) => {
   const { mains, snacks } = split(meals);
   const disc = DISCOUNT[days] ?? 0;
-  const ref = REF_KCAL[Math.min(6, Math.max(3, meals))];
+  const ref = REF_KCAL[Math.min(7, Math.max(3, meals))];
   const factor = kcal > 0 ? 1 + ELASTICITY * (kcal / ref - 1) : 1;
   const floor = (dayCost(meals) * (1 + MIN_MARGIN)) / (1 - disc);
   return Math.max((mains * PRICE_MAIN + snacks * PRICE_SNACK) * factor, floor) * (1 - disc);

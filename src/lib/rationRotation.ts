@@ -22,9 +22,11 @@ const SLOT_PLANS: Record<number, MealType[]> = {
   4: ['breakfast', 'lunch', 'snack', 'dinner'],
   5: ['breakfast', 'snack', 'lunch', 'snack', 'dinner'],
   6: ['breakfast', 'snack', 'lunch', 'snack', 'dinner', 'dessert'],
+  // 7 meals (3000 kcal): a second main dish at lunch, like two containers in one sitting
+  7: ['breakfast', 'snack', 'lunch', 'lunch', 'snack', 'dinner', 'snack'],
 };
 
-export const slotPlan = (meals: number): MealType[] => SLOT_PLANS[Math.min(6, Math.max(3, Math.round(meals)))];
+export const slotPlan = (meals: number): MealType[] => SLOT_PLANS[Math.min(7, Math.max(3, Math.round(meals)))];
 
 const WEEKDAY_KEYS: DayOfWeek[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 export const weekdayKey = (date: Date): DayOfWeek => WEEKDAY_KEYS[date.getDay()];
