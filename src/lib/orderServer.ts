@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { createPayzePayment, onlinePaymentsConfigured } from '@/lib/payments/payze';
+import { createFlittPayment, onlinePaymentsConfigured } from '@/lib/payments/flitt';
 
 /** 6-character payment code for cash payments at a gym (no 0/O/1/I so it is easy to read out loud). */
 export const newPayCode = () => {
@@ -18,7 +18,7 @@ export async function startOnlinePayment(
   if (!onlinePaymentsConfigured()) return null;
   try {
     const lang = order.language === 'ka' || order.language === 'en' ? order.language : 'ru';
-    const { url, ref } = await createPayzePayment({ orderId: order.id, amountGEL: Number(order.total), language: lang });
+    const { url, ref } = await createFlittPayment({ orderId: order.id, amountGEL: Number(order.total), language: lang });
     await db.from('site_orders').update({ payment_status: 'pending', payment_ref: ref || null }).eq('id', order.id);
     return { url };
   } catch (e: any) {

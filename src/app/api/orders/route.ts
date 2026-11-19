@@ -7,7 +7,7 @@ import { enabledOptions, mealsFor } from '@/lib/rationOptions';
 import { formatRationOrderNotification, sendTelegramMessage } from '@/lib/telegram';
 import { getServiceSupabase, normalizePhone } from '@/lib/serverSupabase';
 import { newOrderId, newPayCode, startOnlinePayment } from '@/lib/orderServer';
-import { onlinePaymentsConfigured } from '@/lib/payments/payze';
+import { onlinePaymentsConfigured } from '@/lib/payments/flitt';
 
 const clip = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n);
 const PAY_RU: Record<string, string> = { online: 'Онлайн (карта)', transfer: 'Перевод на счёт', gym: 'Наличными в зале' };
