@@ -68,6 +68,41 @@ export function isCookItem(
 }
 
 /**
+ * Same breakdown as calculateSaleCookBreakdown, but from the per-product totals the database
+ * returns (pos_sales_summary) instead of from individual receipts.
+ * Receipts without items count as one kitchen unit each (same as the per-receipt fallback).
+ */
+export function calculateCookBreakdownFromProducts(
+  products: { productId?: string; productName: string; quantity: number; revenue: number }[] = [],
+  dishes: AdminDish[] = [],
+  excludedCategories: string[] = DEFAULT_EXCLUDED_CATEGORIES,
+  noItems: { receipts: number; gross: number } = { receipts: 0, gross: 0 }
+) {
+  let cookGross = noItems.gross;
+  let excludedGross = 0;
+  let cookUnits = noItems.receipts;
+  let excludedUnits = 0;
+
+  products.forEach(p => {
+    if (isCookItem(p, dishes, excludedCategories)) {
+      cookGross += p.revenue;
+      cookUnits += p.quantity;
+    } else {
+      excludedGross += p.revenue;
+      excludedUnits += p.quantity;
+    }
+  });
+
+  return {
+    cookGross,
+    excludedGross,
+    cookUnits,
+    excludedUnits,
+    cookCommission: Math.round((cookGross * 0.05) * 100) / 100,
+  };
+}
+
+/**
  * Calculates cook and non-cook breakdowns for a list of sale items or sale
  */
 export function calculateSaleCookBreakdown(

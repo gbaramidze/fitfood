@@ -1,19 +1,35 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAdmin } from '@/context/AdminContext';
 import { PartnerSale } from '@/types/partner';
-import { 
-  COOK_CATEGORIES, 
-  DEFAULT_EXCLUDED_CATEGORIES, 
-  isCookItem, 
-  calculateSaleCookBreakdown 
+import {
+  COOK_CATEGORIES,
+  DEFAULT_EXCLUDED_CATEGORIES,
+  isCookItem,
+  calculateSaleCookBreakdown,
+  calculateCookBreakdownFromProducts
 } from '@/lib/cookCommissionHelper';
+import { partnerDbService, SalesSummary, SalesQueryFilters } from '@/services/partnerDbService';
+import { getSalesDateRange, SalesPeriod } from '@/lib/salesPeriod';
+import { AdminPagination } from './AdminPagination';
 
-type PeriodType = 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'custom' | 'all';
+type PeriodType = SalesPeriod;
+
+const EMPTY_SUMMARY: SalesSummary = {
+  receipts: 0,
+  gross: 0,
+  net: 0,
+  discount: 0,
+  noItemsReceipts: 0,
+  noItemsGross: 0,
+  products: [],
+};
 
 export const AdminPosSalesHistory: React.FC = () => {
-  const { sales, points, searchQuery, dishes } = useAdmin();
+  // `sales` (the full list kept in context) is only used as a "something changed" signal for realtime refresh;
+  // totals come from the database (SUM/COUNT) and the table is paginated on the server.
+  const { sales: liveSales, points, searchQuery, dishes } = useAdmin();
 
   const [selectedPointFilter, setSelectedPointFilter] = useState<string>('all');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
@@ -45,59 +61,7 @@ export const AdminPosSalesHistory: React.FC = () => {
     });
   };
 
-  // Helper for date filtering
-  const filterByDate = (dateStr?: string) => {
-    if (!dateStr) return false;
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return false;
-
-    const now = new Date();
-
-    if (selectedPeriod === 'today') {
-      return (
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth() &&
-        d.getDate() === now.getDate()
-      );
-    }
-    if (selectedPeriod === 'yesterday') {
-      const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
-      return (
-        d.getFullYear() === yesterday.getFullYear() &&
-        d.getMonth() === yesterday.getMonth() &&
-        d.getDate() === yesterday.getDate()
-      );
-    }
-    if (selectedPeriod === 'week') {
-      const diffMs = now.getTime() - d.getTime();
-      const diffDays = diffMs / (1000 * 3600 * 24);
-      return diffDays >= 0 && diffDays <= 7;
-    }
-    if (selectedPeriod === 'month') {
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    }
-    if (selectedPeriod === 'last_month') {
-      const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      return d.getFullYear() === prevMonthDate.getFullYear() && d.getMonth() === prevMonthDate.getMonth();
-    }
-    if (selectedPeriod === 'custom') {
-      if (customStartDate) {
-        const start = new Date(customStartDate);
-        start.setHours(0, 0, 0, 0);
-        if (d < start) return false;
-      }
-      if (customEndDate) {
-        const end = new Date(customEndDate);
-        end.setHours(23, 59, 59, 999);
-        if (d > end) return false;
-      }
-      return true;
-    }
-    return true; // 'all'
-  };
-
-  // Helper to get nominal original amount of a single sale
+  // Helper to get nominal original amount of a single sale (used for the receipts shown in the table)
   const getSaleOriginalAmount = (s: PartnerSale): number => {
     if (Number(s.originalAmount) > 0) return Number(s.originalAmount);
     if (Array.isArray(s.items) && s.items.length > 0) {
@@ -106,32 +70,73 @@ export const AdminPosSalesHistory: React.FC = () => {
     return Number(s.totalAmount) || 0;
   };
 
-  const filteredSales = useMemo(() => {
-    return sales.filter((s) => {
-      // 1. Period filter
-      if (!filterByDate(s.createdAt)) return false;
+  // ---------- Server-side data: filters -> totals (SUM) + one page of receipts ----------
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(searchQuery);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
-      // 2. Search query filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchNum = s.receiptNumber.toLowerCase().includes(q);
-        const matchItems = Array.isArray(s.items) && s.items.some(it => it.productName.toLowerCase().includes(q));
-        if (!matchNum && !matchItems) return false;
+  const filters: SalesQueryFilters = useMemo(() => {
+    const range = getSalesDateRange(selectedPeriod, customStartDate, customEndDate);
+    return {
+      from: range.from,
+      to: range.to,
+      pointId: selectedPointFilter,
+      paymentMethod: paymentFilter,
+      search: debouncedSearch,
+    };
+  }, [selectedPeriod, customStartDate, customEndDate, selectedPointFilter, paymentFilter, debouncedSearch]);
+
+  const [pageSize, setPageSize] = useState<number>(50);
+
+  // The page number belongs to one set of filters; when the filters (or the page size) change it falls back to 1.
+  const filtersKey = JSON.stringify([filters, pageSize]);
+  const [pageState, setPageState] = useState<{ key: string; page: number }>({ key: filtersKey, page: 1 });
+  const page = pageState.key === filtersKey ? pageState.page : 1;
+  const setPage = (p: number) => setPageState({ key: filtersKey, page: p });
+
+  const [summary, setSummary] = useState<SalesSummary>(EMPTY_SUMMARY);
+  const [isSummaryLoading, setIsSummaryLoading] = useState<boolean>(true);
+  const [pageRows, setPageRows] = useState<PartnerSale[]>([]);
+  const [totalRows, setTotalRows] = useState<number>(0);
+  const [isPageLoading, setIsPageLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<boolean>(false);
+
+  // Ignore responses of requests that were superseded by newer filters
+  const summaryReq = useRef(0);
+  const pageReq = useRef(0);
+
+  useEffect(() => {
+    const reqId = ++summaryReq.current;
+    setIsSummaryLoading(true);
+    partnerDbService.getSalesSummary(filters).then(result => {
+      if (reqId !== summaryReq.current) return;
+      if (result) {
+        setSummary(result);
+        setLoadError(false);
+      } else {
+        setLoadError(true);
       }
-
-      // 3. Point filter
-      if (selectedPointFilter !== 'all' && s.pointId !== selectedPointFilter) return false;
-
-      // 4. Payment method filter
-      if (paymentFilter !== 'all' && s.paymentMethod !== paymentFilter) return false;
-
-      return true;
+      setIsSummaryLoading(false);
     });
-  }, [sales, selectedPeriod, customStartDate, customEndDate, searchQuery, selectedPointFilter, paymentFilter]);
+  }, [filters, liveSales]);
 
-  const completedSales = useMemo(() => {
-    return filteredSales.filter(s => s.status === 'completed');
-  }, [filteredSales]);
+  useEffect(() => {
+    const reqId = ++pageReq.current;
+    setIsPageLoading(true);
+    partnerDbService.getSalesPage(filters, page, pageSize).then(result => {
+      if (reqId !== pageReq.current) return;
+      if (result) {
+        setPageRows(result.rows);
+        setTotalRows(result.total);
+        setLoadError(false);
+      } else {
+        setLoadError(true);
+      }
+      setIsPageLoading(false);
+    });
+  }, [filters, page, pageSize, liveSales]);
 
   // Helper to resolve a sold item's dish category
   const resolveItemCategory = (it: { productId?: string; productName: string }): string => {
@@ -148,21 +153,15 @@ export const AdminPosSalesHistory: React.FC = () => {
     return dish?.category || 'other';
   };
 
-  // Breakdown of sold positions by dish category for the selected period/filters
+  // Breakdown of sold positions by dish category for ALL receipts of the selected period/filters
   const categoryBreakdown = useMemo(() => {
     const map: Record<string, { quantity: number; revenue: number }> = {};
 
-    completedSales.forEach(s => {
-      if (!Array.isArray(s.items)) return;
-      s.items.forEach(it => {
-        const catId = resolveItemCategory(it);
-        const qty = Number(it.quantity) || 1;
-        const revenue = Number(it.totalPrice) || ((Number(it.pricePerUnit) || 0) * qty);
-
-        if (!map[catId]) map[catId] = { quantity: 0, revenue: 0 };
-        map[catId].quantity += qty;
-        map[catId].revenue += revenue;
-      });
+    summary.products.forEach(p => {
+      const catId = resolveItemCategory(p);
+      if (!map[catId]) map[catId] = { quantity: 0, revenue: 0 };
+      map[catId].quantity += p.quantity;
+      map[catId].revenue += p.revenue;
     });
 
     const totalRevenue = Object.values(map).reduce((sum, c) => sum + c.revenue, 0);
@@ -180,57 +179,29 @@ export const AdminPosSalesHistory: React.FC = () => {
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
-  }, [completedSales, dishes]);
+  }, [summary, dishes]);
 
-  // Overall Financial Calculations with Category Differentiation
+  // Overall financial figures: totals come from the database, the cook split is applied to per-product totals
   const salesStats = useMemo(() => {
-    let totalGross = 0;
-    let totalNet = 0;
-    let totalDiscount = 0;
-    let totalCookGross = 0;
-    let totalExcludedGross = 0;
-    let totalCookUnits = 0;
-    let totalExcludedUnits = 0;
-
-    completedSales.forEach(s => {
-      const orig = getSaleOriginalAmount(s);
-      const net = Number(s.totalAmount) || 0;
-      const disc = Number(s.discountAmount) > 0 ? Number(s.discountAmount) : Math.max(0, orig - net);
-
-      totalGross += orig;
-      totalNet += net;
-      totalDiscount += disc;
-
-      if (Array.isArray(s.items) && s.items.length > 0) {
-        const breakdown = calculateSaleCookBreakdown(s.items, dishes, excludedCategories);
-        totalCookGross += breakdown.cookGross;
-        totalExcludedGross += breakdown.excludedGross;
-        totalCookUnits += breakdown.cookUnits;
-        totalExcludedUnits += breakdown.excludedUnits;
-      } else {
-        // Fallback if items array empty
-        totalCookGross += orig;
-        totalCookUnits += 1;
-      }
+    const cook = calculateCookBreakdownFromProducts(summary.products, dishes, excludedCategories, {
+      receipts: summary.noItemsReceipts,
+      gross: summary.noItemsGross,
     });
-
-    const cookCommission = Math.round((totalCookGross * 0.05) * 100) / 100;
-    const totalUnits = totalCookUnits + totalExcludedUnits;
-    const avgCheck = completedSales.length > 0 ? (totalNet / completedSales.length).toFixed(2) : '0.00';
+    const avgCheck = summary.receipts > 0 ? (summary.net / summary.receipts).toFixed(2) : '0.00';
 
     return {
-      totalGross,
-      totalNet,
-      totalDiscount,
-      totalCookGross,
-      totalExcludedGross,
-      totalCookUnits,
-      totalExcludedUnits,
-      totalUnits,
-      cookCommission,
+      totalGross: summary.gross,
+      totalNet: summary.net,
+      totalDiscount: summary.discount,
+      totalCookGross: cook.cookGross,
+      totalExcludedGross: cook.excludedGross,
+      totalCookUnits: cook.cookUnits,
+      totalExcludedUnits: cook.excludedUnits,
+      totalUnits: cook.cookUnits + cook.excludedUnits,
+      cookCommission: cook.cookCommission,
       avgCheck,
     };
-  }, [completedSales, dishes, excludedCategories]);
+  }, [summary, dishes, excludedCategories]);
 
   // Copy Summary text for report / messenger
   const handleCopyCookSummary = () => {
@@ -439,7 +410,7 @@ export const AdminPosSalesHistory: React.FC = () => {
             {salesStats.totalUnits} ცალი
           </div>
           <div className="kpi-footer-note">
-            {completedSales.length} ჩეკი | საშუალო ჩეკი: <b>{salesStats.avgCheck} ₾</b>
+            {summary.receipts} ჩეკი | საშუალო ჩეკი: <b>{salesStats.avgCheck} ₾</b>
           </div>
         </div>
       </div>
@@ -536,12 +507,22 @@ export const AdminPosSalesHistory: React.FC = () => {
         </div>
 
         <div style={{ fontSize: '12px', color: '#9CA3AF', marginLeft: 'auto' }}>
-          ჩვენება: <b>{completedSales.length}</b> ჩეკი ({salesStats.totalUnits} პოზიცია)
+          სულ პერიოდში: <b>{summary.receipts}</b> დასრულებული ჩეკი ({salesStats.totalUnits} პოზიცია)
         </div>
       </div>
 
+      {loadError && (
+        <div className="admin-info-banner" style={{ borderLeftColor: '#EF4444' }}>
+          <span style={{ fontSize: '20px' }}>⚠️</span>
+          <div>
+            <b>მონაცემები ვერ ჩაიტვირთა.</b> თუ ეს პირველი გაშვებაა, Supabase SQL Editor-ში გაუშვით ფაილი{' '}
+            <code>supabase/add_sales_summary_rpc.sql</code> (ერთხელ), შემდეგ განაახლეთ გვერდი.
+          </div>
+        </div>
+      )}
+
       {/* Sales Receipts Table */}
-      <div className="admin-card">
+      <div className="admin-card" style={{ opacity: isSummaryLoading || isPageLoading ? 0.85 : 1, transition: 'opacity 0.15s' }}>
         <div className="admin-table-responsive">
           <table className="admin-data-table">
             <thead>
@@ -558,16 +539,22 @@ export const AdminPosSalesHistory: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredSales.length === 0 ? (
+              {pageRows.length === 0 ? (
                 <tr>
                   <td colSpan={9} style={{ textAlign: 'center', padding: '36px 16px', color: '#9CA3AF' }}>
-                    <div style={{ fontSize: '24px', marginBottom: '6px' }}>🧾</div>
-                    <div style={{ color: '#F9FAFB', fontWeight: 700, marginBottom: '2px' }}>არჩეულ პერიოდში გაყიდვები არ მოიძებნა</div>
-                    <div style={{ fontSize: '12px' }}>სცადეთ შეცვალოთ თარიღის ფილტრი ან გაყიდვის წერტილი.</div>
+                    {isPageLoading ? (
+                      <div style={{ fontWeight: 700 }}>იტვირთება…</div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: '24px', marginBottom: '6px' }}>🧾</div>
+                        <div style={{ color: '#F9FAFB', fontWeight: 700, marginBottom: '2px' }}>არჩეულ პერიოდში გაყიდვები არ მოიძებნა</div>
+                        <div style={{ fontSize: '12px' }}>სცადეთ შეცვალოთ თარიღის ფილტრი ან გაყიდვის წერტილი.</div>
+                      </>
+                    )}
                   </td>
                 </tr>
               ) : (
-                filteredSales.map((sale) => {
+                pageRows.map((sale) => {
                   const point = points.find(p => p.id === sale.pointId);
                   const isRefund = sale.status === 'refunded';
                   const origAmount = getSaleOriginalAmount(sale);
@@ -684,6 +671,15 @@ export const AdminPosSalesHistory: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        <AdminPagination
+          page={page}
+          pageSize={pageSize}
+          total={totalRows}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          isLoading={isPageLoading}
+        />
       </div>
     </div>
   );

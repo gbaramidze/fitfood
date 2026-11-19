@@ -3,7 +3,9 @@
 import React, { useState } from 'react';
 import { useAdmin } from '@/context/AdminContext';
 import { AdminExpense, AdminSalary, ExpenseCategory, EmployeeRole } from '@/types/admin';
-import { calculateSaleCookBreakdown } from '@/lib/cookCommissionHelper';
+import { calculateCookBreakdownFromProducts } from '@/lib/cookCommissionHelper';
+import { partnerDbService, SalesSummary } from '@/services/partnerDbService';
+import { getSalesDateRange } from '@/lib/salesPeriod';
 
 export const AdminExpensesPayroll: React.FC = () => {
   const { 
@@ -11,7 +13,7 @@ export const AdminExpensesPayroll: React.FC = () => {
     salaries, 
     totalExpenses, 
     totalPayroll, 
-    sales, 
+    sales: liveSales, 
     dishes,
     addExpense, 
     deleteExpense, 
@@ -43,67 +45,42 @@ export const AdminExpensesPayroll: React.FC = () => {
   const [salShifts, setSalShifts] = useState<number>(24);
   const [salBonus, setSalBonus] = useState<number>(0);
 
-  // Cook 5% bonus calculation from sales (kitchen dishes only, excluding coffee & drinks)
+  // Cook 5% bonus calculation from sales (kitchen dishes only, excluding coffee & drinks).
+  // SUMs are computed in the database over ALL receipts of the period (the client never sees more than 1000 rows).
+  const [cookSummary, setCookSummary] = useState<SalesSummary | null>(null);
+  const [cookSummaryError, setCookSummaryError] = useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const range = getSalesDateRange(cookCalcPeriod);
+    setCookSummary(null);
+    setCookSummaryError(false);
+    partnerDbService.getSalesSummary({ from: range.from, to: range.to }).then(result => {
+      if (cancelled) return;
+      if (result) setCookSummary(result);
+      else setCookSummaryError(true);
+    });
+    return () => { cancelled = true; };
+  }, [cookCalcPeriod, liveSales]);
+
   const cookSalesStats = React.useMemo(() => {
-    const now = new Date();
-    const filtered = sales.filter((s) => {
-      if (s.status !== 'completed') return false;
-      if (!s.createdAt) return false;
-      const d = new Date(s.createdAt);
-      if (isNaN(d.getTime())) return false;
-
-      if (cookCalcPeriod === 'month') {
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-      }
-      if (cookCalcPeriod === 'last_month') {
-        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        return d.getFullYear() === prevMonth.getFullYear() && d.getMonth() === prevMonth.getMonth();
-      }
-      return true; // 'all'
+    const s = cookSummary;
+    const cook = calculateCookBreakdownFromProducts(s?.products ?? [], dishes, undefined, {
+      receipts: s?.noItemsReceipts ?? 0,
+      gross: s?.noItemsGross ?? 0,
     });
-
-    let totalGross = 0;
-    let netAmount = 0;
-    let cookGross = 0;
-    let excludedGross = 0;
-    let cookUnits = 0;
-    let excludedUnits = 0;
-
-    filtered.forEach(s => {
-      const orig = Number(s.originalAmount) > 0
-        ? Number(s.originalAmount)
-        : (Array.isArray(s.items) && s.items.length > 0
-            ? s.items.reduce((sum, it) => sum + ((Number(it.pricePerUnit) || 16) * (Number(it.quantity) || 1)), 0)
-            : Number(s.totalAmount) || 0);
-
-      totalGross += orig;
-      netAmount += Number(s.totalAmount) || 0;
-
-      if (Array.isArray(s.items) && s.items.length > 0) {
-        const bd = calculateSaleCookBreakdown(s.items, dishes);
-        cookGross += bd.cookGross;
-        excludedGross += bd.excludedGross;
-        cookUnits += bd.cookUnits;
-        excludedUnits += bd.excludedUnits;
-      } else {
-        cookGross += orig;
-        cookUnits += 1;
-      }
-    });
-
-    const cookCommission = Math.round((cookGross * 0.05) * 100) / 100;
 
     return {
-      totalGross,
-      netAmount,
-      cookGross,
-      excludedGross,
-      cookUnits,
-      excludedUnits,
-      receiptsCount: filtered.length,
-      cookCommission,
+      totalGross: s?.gross ?? 0,
+      netAmount: s?.net ?? 0,
+      cookGross: cook.cookGross,
+      excludedGross: cook.excludedGross,
+      cookUnits: cook.cookUnits,
+      excludedUnits: cook.excludedUnits,
+      receiptsCount: s?.receipts ?? 0,
+      cookCommission: cook.cookCommission,
     };
-  }, [sales, dishes, cookCalcPeriod]);
+  }, [cookSummary, dishes]);
 
   // Apply cook 5% to cook's salary record
   const handleApplyCookBonusToSalary = (salaryId: string, currentBonus: number) => {
@@ -345,6 +322,12 @@ export const AdminExpensesPayroll: React.FC = () => {
               </div>
             </div>
 
+            {cookSummaryError && (
+              <div style={{ fontSize: '12px', color: '#EF4444', marginBottom: '10px' }}>
+                ⚠️ გაყიდვების ჯამი ვერ ჩაიტვირთა. გაუშვით <code>supabase/add_sales_summary_rpc.sql</code> Supabase SQL Editor-ში (ერთხელ) და განაახლეთ გვერდი.
+              </div>
+            )}
+
             {/* Quick apply to cook salary */}
             {salaries.some(s => s.role === 'cook' || s.role === 'chef') && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingTop: '10px', borderTop: '1px solid #1F2937', flexWrap: 'wrap' }}>
@@ -356,8 +339,9 @@ export const AdminExpensesPayroll: React.FC = () => {
                       key={cook.id}
                       type="button"
                       onClick={() => handleApplyCookBonusToSalary(cook.id, cook.bonus || 0)}
+                      disabled={!cookSummary}
                       className="admin-mini-btn btn-success"
-                      style={{ padding: '6px 12px', fontSize: '12px' }}
+                      style={{ padding: '6px 12px', fontSize: '12px', opacity: cookSummary ? 1 : 0.5 }}
                     >
                       ✨ დარიცხვა «{cook.employeeName}»-ს (+{cookSalesStats.cookCommission.toFixed(2)} ₾)
                     </button>

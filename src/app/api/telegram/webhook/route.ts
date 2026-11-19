@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { handleTelegramCommand } from '@/lib/telegram';
+import { handleTelegramCommand, handleTelegramCallback, answerTelegramCallback } from '@/lib/telegram';
 
 export async function POST(req: NextRequest) {
   try {
     const update = await req.json();
+
+    // Inline menu button tapped
+    const cb = update.callback_query;
+    if (cb) {
+      await answerTelegramCallback(cb.id);
+      const cbChatId = cb.message?.chat?.id;
+      if (cb.data && cbChatId) {
+        await handleTelegramCallback(cb.data, cbChatId);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const msg = update.message || update.channel_post || update.edited_message || update.edited_channel_post;
 
     if (msg && msg.text) {
@@ -31,6 +43,8 @@ export async function GET() {
       stats: '/stats',
       yesterday: '/yesterday',
       month: '/month',
+      writeoff: '/writeoff',
+      finance: '/finance',
     }
   });
 }

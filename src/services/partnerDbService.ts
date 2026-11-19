@@ -39,6 +39,70 @@ export function sortPartnerProducts(products: PartnerProduct[]): PartnerProduct[
   return list;
 }
 
+/** Filters applied in the database (see supabase/add_sales_summary_rpc.sql). */
+export interface SalesQueryFilters {
+  /** ISO timestamp, inclusive */
+  from?: string | null;
+  /** ISO timestamp, exclusive */
+  to?: string | null;
+  pointId?: string | null;
+  paymentMethod?: string | null;
+  /** receipt number or product name */
+  search?: string | null;
+}
+
+export interface SalesSummaryProduct {
+  productId?: string;
+  productName: string;
+  quantity: number;
+  /** nominal revenue of this product over the period */
+  revenue: number;
+}
+
+export interface SalesSummary {
+  receipts: number;
+  gross: number;
+  net: number;
+  discount: number;
+  /** completed receipts that have no items array (counted as 1 kitchen unit each) */
+  noItemsReceipts: number;
+  noItemsGross: number;
+  products: SalesSummaryProduct[];
+}
+
+function toRpcFilters(f: SalesQueryFilters) {
+  const search = f.search?.trim();
+  return {
+    p_from: f.from || null,
+    p_to: f.to || null,
+    p_point_id: f.pointId && f.pointId !== 'all' ? f.pointId : null,
+    p_payment: f.paymentMethod && f.paymentMethod !== 'all' ? f.paymentMethod : null,
+    p_search: search ? search : null,
+  };
+}
+
+function mapSaleRow(s: any): PartnerSale {
+  return {
+    id: s.id,
+    pointId: s.point_id,
+    receiptNumber: s.receipt_number,
+    items: s.items,
+    originalAmount: Number(s.original_amount),
+    discountAmount: Number(s.discount_amount || 0),
+    discountType: s.discount_type,
+    discountComment: s.discount_comment,
+    totalAmount: Number(s.total_amount),
+    paymentMethod: s.payment_method,
+    splitDetails: s.split_details,
+    sellerRole: s.seller_role,
+    notes: s.notes,
+    status: s.status,
+    refundReason: s.refund_reason,
+    refundedAt: s.refunded_at,
+    createdAt: s.created_at,
+  };
+}
+
 export const partnerDbService = {
   // 1. Fetch Points
   async getPoints(): Promise<PartnerPoint[] | null> {
@@ -162,31 +226,82 @@ export const partnerDbService = {
   },
 
   // 4. Fetch Sales
+  // Supabase caps every response at 1000 rows, so ALL sales are read page by page.
+  // (Totals for the admin sales page / payroll come from getSalesSummary, not from this list.)
   async getSales(): Promise<PartnerSale[] | null> {
     if (!isSupabaseConfigured) return null;
     try {
-      const { data, error } = await supabase.from('partner_sales').select('*').order('created_at', { ascending: false });
-      if (error || !data) return null;
-      return data.map(s => ({
-        id: s.id,
-        pointId: s.point_id,
-        receiptNumber: s.receipt_number,
-        items: s.items,
-        originalAmount: Number(s.original_amount),
-        discountAmount: Number(s.discount_amount || 0),
-        discountType: s.discount_type,
-        discountComment: s.discount_comment,
-        totalAmount: Number(s.total_amount),
-        paymentMethod: s.payment_method,
-        splitDetails: s.split_details,
-        sellerRole: s.seller_role,
-        notes: s.notes,
-        status: s.status,
-        refundReason: s.refund_reason,
-        refundedAt: s.refunded_at,
-        createdAt: s.created_at,
-      }));
+      const PAGE_SIZE = 1000;
+      const rows: any[] = [];
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await supabase
+          .from('partner_sales')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+        if (error || !data) return null;
+        rows.push(...data);
+        if (data.length < PAGE_SIZE) break;
+      }
+      return rows.map(mapSaleRow);
     } catch {
+      return null;
+    }
+  },
+
+  // 4b. One page of receipts + total count for the current filters (server-side pagination)
+  async getSalesPage(
+    filters: SalesQueryFilters,
+    page: number,
+    pageSize: number
+  ): Promise<{ rows: PartnerSale[]; total: number } | null> {
+    if (!isSupabaseConfigured) return null;
+    try {
+      const { data, error } = await supabase.rpc('pos_sales_page', {
+        ...toRpcFilters(filters),
+        p_limit: pageSize,
+        p_offset: Math.max(0, page - 1) * pageSize,
+      });
+      if (error || !data) {
+        console.warn('pos_sales_page failed (is supabase/add_sales_summary_rpc.sql applied?):', error?.message);
+        return null;
+      }
+      return {
+        rows: (Array.isArray(data.rows) ? data.rows : []).map(mapSaleRow),
+        total: Number(data.total) || 0,
+      };
+    } catch (e) {
+      console.warn('Error fetching sales page:', e);
+      return null;
+    }
+  },
+
+  // 4c. SUM / COUNT over ALL matching completed receipts, computed in the database
+  async getSalesSummary(filters: SalesQueryFilters): Promise<SalesSummary | null> {
+    if (!isSupabaseConfigured) return null;
+    try {
+      const { data, error } = await supabase.rpc('pos_sales_summary', toRpcFilters(filters));
+      if (error || !data) {
+        console.warn('pos_sales_summary failed (is supabase/add_sales_summary_rpc.sql applied?):', error?.message);
+        return null;
+      }
+      return {
+        receipts: Number(data.receipts) || 0,
+        gross: Number(data.gross) || 0,
+        net: Number(data.net) || 0,
+        discount: Number(data.discount) || 0,
+        noItemsReceipts: Number(data.noItemsReceipts) || 0,
+        noItemsGross: Number(data.noItemsGross) || 0,
+        products: (Array.isArray(data.products) ? data.products : []).map((p: any) => ({
+          productId: p.productId || undefined,
+          productName: String(p.productName || ''),
+          quantity: Number(p.quantity) || 0,
+          revenue: Number(p.revenue) || 0,
+        })),
+      };
+    } catch (e) {
+      console.warn('Error fetching sales summary:', e);
       return null;
     }
   },
